@@ -1,0 +1,9 @@
+aiohttp
+beautifulsoup4
+fake-useragent
+google-search-results
+openai
+pydantic 
+pypdf
+python-dotenv
+trafilatura

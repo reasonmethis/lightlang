@@ -1,0 +1,2455 @@
+
+
+----------------------------------------------------------------
+CONTENT OF .gitignore
+----------------------------------------------------------------
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+#   For a library or package, you might want to ignore these files since the code is
+#   intended to run in multiple environments; otherwise, check them in:
+# .python-version
+
+# pipenv
+#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
+#   However, in case of collaboration, if having platform-specific dependencies or dependencies
+#   having no cross-platform support, pipenv may install dependencies that don't work, or not
+#   install all needed dependencies.
+#Pipfile.lock
+
+# poetry
+#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
+#   This is especially recommended for binary packages to ensure reproducibility, and is more
+#   commonly ignored for libraries.
+#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
+#poetry.lock
+
+# pdm
+#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
+#pdm.lock
+#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
+#   in version control.
+#   https://pdm.fming.dev/latest/usage/project/#working-with-version-control
+.pdm.toml
+.pdm-python
+.pdm-build/
+
+# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# PyCharm
+#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
+#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
+#  and can be added to the global gitignore or merged into this file.  For a more nuclear
+#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
+#.idea/
+
+
+----------------------------------------------------------------
+CONTENT OF requirements.txt
+----------------------------------------------------------------
+
+aiohttp
+beautifulsoup4
+fake-useragent
+google-search-results
+openai
+pydantic 
+pypdf
+python-dotenv
+trafilatura
+
+----------------------------------------------------------------
+CONTENT OF schemas.py
+----------------------------------------------------------------
+
+from typing import Any
+
+from pydantic import BaseModel
+
+class Doc(BaseModel):
+    """A text document along with its associated metadata."""
+
+    text: str
+    metadata: dict[str, Any]
+
+----------------------------------------------------------------
+CONTENT OF workflow_engine.py
+----------------------------------------------------------------
+
+import os
+from typing import Any, Callable, Literal
+
+from dotenv import load_dotenv
+from pydantic import BaseModel
+
+from utils.llm import ChatMessage, OpenRouterLLM
+from utils.log import setup_logger
+from utils.prompt_template import PromptTemplate
+
+load_dotenv()
+logger = setup_logger()
+
+
+MODEL = os.getenv("MODEL")
+TEMPERATURE = float(os.getenv("TEMPERATURE"))
+
+
+class StreamEvent(BaseModel):
+    """Data that can be yielded in place of a token to signal any kind of event."""
+
+    event: Literal["RESTART_TASK", "BEGIN_TASK", "END_TASK"]
+    data: dict[str, Any] | None = None
+
+
+class StreamResult(BaseModel):
+    """Result of a streaming task."""
+
+    llm_output: str
+    parsed_output: Any
+
+
+class Task:
+    def __init__(
+        self,
+        prompt_template: PromptTemplate,
+        *,
+        output_parser: Callable | None = None,
+        output_handler: Callable | None = None,
+        output_name: str | None = None,
+        task_id: int | str | None = None,
+    ):
+        self.prompt_template = prompt_template
+        self.output_parser = output_parser
+        self.output_name = output_name
+        self.output_handler = output_handler
+        self.task_id = task_id
+
+
+DEFAULT_MAX_LLM_CALL_TRIES = 3
+
+
+class WorkflowEngine:
+    """Engine for running a workflow of tasks using an LLM."""
+
+    def __init__(self, llm: OpenRouterLLM, inputs: dict[str, str]):
+        self.llm = llm
+
+        # inputs is a dict of initial variables available for use in tasks' prompts.
+        # After each task, the result of the task is added to the inputs dict.
+        # Since the same workflow engine can be used for multiple workflows, tasks
+        # from one workflow can use the outputs of tasks from another workflow.
+        self.inputs = inputs
+
+    def stream(
+        self,
+        messages: str | list[ChatMessage],
+        task_id: int,
+        parser: Callable | None = None,  # Parser for the output (e.g. JSON extractor)
+        max_tries: int = DEFAULT_MAX_LLM_CALL_TRIES,
+    ):
+        # Call the LLM and yield as well as collect the streaming output
+        for attempt in range(1, max_tries + 1):
+            log_msg = f"Calling LLM for Task {task_id}"
+            if attempt == 1:
+                yield StreamEvent(event="BEGIN_TASK", data={"task_id": task_id})
+            else:
+                # Since this is a retry, signal the retry event
+                yield StreamEvent(event="RESTART_TASK", data={"attempt": attempt})
+                log_msg += f" (attempt {attempt}/{max_tries})"
+            logger.info(log_msg)
+
+            # Call the LLM and retry if there is an error
+            llm_output = ""
+            try:
+                for content in self.llm.stream(messages=messages):
+                    llm_output += content
+                    yield content
+            except Exception as e:
+                logger.warning(f"Error calling LLM: {(last_error:=e)}")
+                continue  # Retry the call if there are more attempts left
+
+            # Parse the output, break if successful, retry if there is an error
+            try:
+                parsed_output = llm_output if parser is None else parser(llm_output)
+                break
+            except Exception as e:
+                logger.warning(f"Error parsing output: {(last_error:=e)}")
+        else:  # No break = all attempts failed
+            logger.error(f"Failed to parse output after {max_tries} attempts")
+            raise last_error  # Will be defined if no break occurred
+
+        # Signal the end of the task and return the parsed output
+        event_data = {"llm_output": llm_output, "task_id": task_id}
+        event_data |= {"parsed_output": parsed_output} if parser is not None else {}
+        yield StreamEvent(event="END_TASK", data=event_data)
+
+        logger.info(f"Finished Task {task_id}.")
+        return StreamResult(llm_output=llm_output, parsed_output=parsed_output)
+
+
+----------------------------------------------------------------
+CONTENT OF .git\config
+----------------------------------------------------------------
+
+[core]
+	repositoryformatversion = 0
+	filemode = false
+	bare = false
+	logallrefupdates = true
+	symlinks = false
+	ignorecase = true
+
+
+----------------------------------------------------------------
+CONTENT OF .git\description
+----------------------------------------------------------------
+
+Unnamed repository; edit this file 'description' to name the repository.
+
+
+----------------------------------------------------------------
+CONTENT OF .git\FETCH_HEAD
+----------------------------------------------------------------
+
+
+
+----------------------------------------------------------------
+CONTENT OF .git\HEAD
+----------------------------------------------------------------
+
+ref: refs/heads/main
+
+
+----------------------------------------------------------------
+CONTENT OF .git\hooks\applypatch-msg.sample
+----------------------------------------------------------------
+
+#!/bin/sh
+#
+# An example hook script to check the commit log message taken by
+# applypatch from an e-mail message.
+#
+# The hook should exit with non-zero status after issuing an
+# appropriate message if it wants to stop the commit.  The hook is
+# allowed to edit the commit message file.
+#
+# To enable this hook, rename this file to "applypatch-msg".
+
+. git-sh-setup
+commitmsg="$(git rev-parse --git-path hooks/commit-msg)"
+test -x "$commitmsg" && exec "$commitmsg" ${1+"$@"}
+:
+
+
+----------------------------------------------------------------
+CONTENT OF .git\hooks\commit-msg.sample
+----------------------------------------------------------------
+
+#!/bin/sh
+#
+# An example hook script to check the commit log message.
+# Called by "git commit" with one argument, the name of the file
+# that has the commit message.  The hook should exit with non-zero
+# status after issuing an appropriate message if it wants to stop the
+# commit.  The hook is allowed to edit the commit message file.
+#
+# To enable this hook, rename this file to "commit-msg".
+
+# Uncomment the below to add a Signed-off-by line to the message.
+# Doing this in a hook is a bad idea in general, but the prepare-commit-msg
+# hook is more suited to it.
+#
+# SOB=$(git var GIT_AUTHOR_IDENT | sed -n 's/^\(.*>\).*$/Signed-off-by: \1/p')
+# grep -qs "^$SOB" "$1" || echo "$SOB" >> "$1"
+
+# This example catches duplicate Signed-off-by lines.
+
+test "" = "$(grep '^Signed-off-by: ' "$1" |
+	 sort | uniq -c | sed -e '/^[ 	]*1[ 	]/d')" || {
+	echo >&2 Duplicate Signed-off-by lines.
+	exit 1
+}
+
+
+----------------------------------------------------------------
+CONTENT OF .git\hooks\fsmonitor-watchman.sample
+----------------------------------------------------------------
+
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+use IPC::Open2;
+
+# An example hook script to integrate Watchman
+# (https://facebook.github.io/watchman/) with git to speed up detecting
+# new and modified files.
+#
+# The hook is passed a version (currently 2) and last update token
+# formatted as a string and outputs to stdout a new update token and
+# all files that have been modified since the update token. Paths must
+# be relative to the root of the working tree and separated by a single NUL.
+#
+# To enable this hook, rename this file to "query-watchman" and set
+# 'git config core.fsmonitor .git/hooks/query-watchman'
+#
+my ($version, $last_update_token) = @ARGV;
+
+# Uncomment for debugging
+# print STDERR "$0 $version $last_update_token\n";
+
+# Check the hook interface version
+if ($version ne 2) {
+	die "Unsupported query-fsmonitor hook version '$version'.\n" .
+	    "Falling back to scanning...\n";
+}
+
+my $git_work_tree = get_working_dir();
+
+my $retry = 1;
+
+my $json_pkg;
+eval {
+	require JSON::XS;
+	$json_pkg = "JSON::XS";
+	1;
+} or do {
+	require JSON::PP;
+	$json_pkg = "JSON::PP";
+};
+
+launch_watchman();
+
+sub launch_watchman {
+	my $o = watchman_query();
+	if (is_work_tree_watched($o)) {
+		output_result($o->{clock}, @{$o->{files}});
+	}
+}
+
+sub output_result {
+	my ($clockid, @files) = @_;
+
+	# Uncomment for debugging watchman output
+	# open (my $fh, ">", ".git/watchman-output.out");
+	# binmode $fh, ":utf8";
+	# print $fh "$clockid\n@files\n";
+	# close $fh;
+
+	binmode STDOUT, ":utf8";
+	print $clockid;
+	print "\0";
+	local $, = "\0";
+	print @files;
+}
+
+sub watchman_clock {
+	my $response = qx/watchman clock "$git_work_tree"/;
+	die "Failed to get clock id on '$git_work_tree'.\n" .
+		"Falling back to scanning...\n" if $? != 0;
+
+	return $json_pkg->new->utf8->decode($response);
+}
+
+sub watchman_query {
+	my $pid = open2(\*CHLD_OUT, \*CHLD_IN, 'watchman -j --no-pretty')
+	or die "open2() failed: $!\n" .
+	"Falling back to scanning...\n";
+
+	# In the query expression below we're asking for names of files that
+	# changed since $last_update_token but not from the .git folder.
+	#
+	# To accomplish this, we're using the "since" generator to use the
+	# recency index to select candidate nodes and "fields" to limit the
+	# output to file names only. Then we're using the "expression" term to
+	# further constrain the results.
+	my $last_update_line = "";
+	if (substr($last_update_token, 0, 1) eq "c") {
+		$last_update_token = "\"$last_update_token\"";
+		$last_update_line = qq[\n"since": $last_update_token,];
+	}
+	my $query = <<"	END";
+		["query", "$git_work_tree", {$last_update_line
+			"fields": ["name"],
+			"expression": ["not", ["dirname", ".git"]]
+		}]
+	END
+
+	# Uncomment for debugging the watchman query
+	# open (my $fh, ">", ".git/watchman-query.json");
+	# print $fh $query;
+	# close $fh;
+
+	print CHLD_IN $query;
+	close CHLD_IN;
+	my $response = do {local $/; <CHLD_OUT>};
+
+	# Uncomment for debugging the watch response
+	# open ($fh, ">", ".git/watchman-response.json");
+	# print $fh $response;
+	# close $fh;
+
+	die "Watchman: command returned no output.\n" .
+	"Falling back to scanning...\n" if $response eq "";
+	die "Watchman: command returned invalid output: $response\n" .
+	"Falling back to scanning...\n" unless $response =~ /^\{/;
+
+	return $json_pkg->new->utf8->decode($response);
+}
+
+sub is_work_tree_watched {
+	my ($output) = @_;
+	my $error = $output->{error};
+	if ($retry > 0 and $error and $error =~ m/unable to resolve root .* directory (.*) is not watched/) {
+		$retry--;
+		my $response = qx/watchman watch "$git_work_tree"/;
+		die "Failed to make watchman watch '$git_work_tree'.\n" .
+		    "Falling back to scanning...\n" if $? != 0;
+		$output = $json_pkg->new->utf8->decode($response);
+		$error = $output->{error};
+		die "Watchman: $error.\n" .
+		"Falling back to scanning...\n" if $error;
+
+		# Uncomment for debugging watchman output
+		# open (my $fh, ">", ".git/watchman-output.out");
+		# close $fh;
+
+		# Watchman will always return all files on the first query so
+		# return the fast "everything is dirty" flag to git and do the
+		# Watchman query just to get it over with now so we won't pay
+		# the cost in git to look up each individual file.
+		my $o = watchman_clock();
+		$error = $output->{error};
+
+		die "Watchman: $error.\n" .
+		"Falling back to scanning...\n" if $error;
+
+		output_result($o->{clock}, ("/"));
+		$last_update_token = $o->{clock};
+
+		eval { launch_watchman() };
+		return 0;
+	}
+
+	die "Watchman: $error.\n" .
+	"Falling back to scanning...\n" if $error;
+
+	return 1;
+}
+
+sub get_working_dir {
+	my $working_dir;
+	if ($^O =~ 'msys' || $^O =~ 'cygwin') {
+		$working_dir = Win32::GetCwd();
+		$working_dir =~ tr/\\/\//;
+	} else {
+		require Cwd;
+		$working_dir = Cwd::cwd();
+	}
+
+	return $working_dir;
+}
+
+
+----------------------------------------------------------------
+CONTENT OF .git\hooks\post-update.sample
+----------------------------------------------------------------
+
+#!/bin/sh
+#
+# An example hook script to prepare a packed repository for use over
+# dumb transports.
+#
+# To enable this hook, rename this file to "post-update".
+
+exec git update-server-info
+
+
+----------------------------------------------------------------
+CONTENT OF .git\hooks\pre-applypatch.sample
+----------------------------------------------------------------
+
+#!/bin/sh
+#
+# An example hook script to verify what is about to be committed
+# by applypatch from an e-mail message.
+#
+# The hook should exit with non-zero status after issuing an
+# appropriate message if it wants to stop the commit.
+#
+# To enable this hook, rename this file to "pre-applypatch".
+
+. git-sh-setup
+precommit="$(git rev-parse --git-path hooks/pre-commit)"
+test -x "$precommit" && exec "$precommit" ${1+"$@"}
+:
+
+
+----------------------------------------------------------------
+CONTENT OF .git\hooks\pre-commit.sample
+----------------------------------------------------------------
+
+#!/bin/sh
+#
+# An example hook script to verify what is about to be committed.
+# Called by "git commit" with no arguments.  The hook should
+# exit with non-zero status after issuing an appropriate message if
+# it wants to stop the commit.
+#
+# To enable this hook, rename this file to "pre-commit".
+
+if git rev-parse --verify HEAD >/dev/null 2>&1
+then
+	against=HEAD
+else
+	# Initial commit: diff against an empty tree object
+	against=$(git hash-object -t tree /dev/null)
+fi
+
+# If you want to allow non-ASCII filenames set this variable to true.
+allownonascii=$(git config --type=bool hooks.allownonascii)
+
+# Redirect output to stderr.
+exec 1>&2
+
+# Cross platform projects tend to avoid non-ASCII filenames; prevent
+# them from being added to the repository. We exploit the fact that the
+# printable range starts at the space character and ends with tilde.
+if [ "$allownonascii" != "true" ] &&
+	# Note that the use of brackets around a tr range is ok here, (it's
+	# even required, for portability to Solaris 10's /usr/bin/tr), since
+	# the square bracket bytes happen to fall in the designated range.
+	test $(git diff --cached --name-only --diff-filter=A -z $against |
+	  LC_ALL=C tr -d '[ -~]\0' | wc -c) != 0
+then
+	cat <<\EOF
+Error: Attempt to add a non-ASCII file name.
+
+This can cause problems if you want to work with people on other platforms.
+
+To be portable it is advisable to rename the file.
+
+If you know what you are doing you can disable this check using:
+
+  git config hooks.allownonascii true
+EOF
+	exit 1
+fi
+
+# If there are whitespace errors, print the offending file names and fail.
+exec git diff-index --check --cached $against --
+
+
+----------------------------------------------------------------
+CONTENT OF .git\hooks\pre-merge-commit.sample
+----------------------------------------------------------------
+
+#!/bin/sh
+#
+# An example hook script to verify what is about to be committed.
+# Called by "git merge" with no arguments.  The hook should
+# exit with non-zero status after issuing an appropriate message to
+# stderr if it wants to stop the merge commit.
+#
+# To enable this hook, rename this file to "pre-merge-commit".
+
+. git-sh-setup
+test -x "$GIT_DIR/hooks/pre-commit" &&
+        exec "$GIT_DIR/hooks/pre-commit"
+:
+
+
+----------------------------------------------------------------
+CONTENT OF .git\hooks\pre-push.sample
+----------------------------------------------------------------
+
+#!/bin/sh
+
+# An example hook script to verify what is about to be pushed.  Called by "git
+# push" after it has checked the remote status, but before anything has been
+# pushed.  If this script exits with a non-zero status nothing will be pushed.
+#
+# This hook is called with the following parameters:
+#
+# $1 -- Name of the remote to which the push is being done
+# $2 -- URL to which the push is being done
+#
+# If pushing without using a named remote those arguments will be equal.
+#
+# Information about the commits which are being pushed is supplied as lines to
+# the standard input in the form:
+#
+#   <local ref> <local oid> <remote ref> <remote oid>
+#
+# This sample shows how to prevent push of commits where the log message starts
+# with "WIP" (work in progress).
+
+remote="$1"
+url="$2"
+
+zero=$(git hash-object --stdin </dev/null | tr '[0-9a-f]' '0')
+
+while read local_ref local_oid remote_ref remote_oid
+do
+	if test "$local_oid" = "$zero"
+	then
+		# Handle delete
+		:
+	else
+		if test "$remote_oid" = "$zero"
+		then
+			# New branch, examine all commits
+			range="$local_oid"
+		else
+			# Update to existing branch, examine new commits
+			range="$remote_oid..$local_oid"
+		fi
+
+		# Check for WIP commit
+		commit=$(git rev-list -n 1 --grep '^WIP' "$range")
+		if test -n "$commit"
+		then
+			echo >&2 "Found WIP commit in $local_ref, not pushing"
+			exit 1
+		fi
+	fi
+done
+
+exit 0
+
+
+----------------------------------------------------------------
+CONTENT OF .git\hooks\pre-rebase.sample
+----------------------------------------------------------------
+
+#!/bin/sh
+#
+# Copyright (c) 2006, 2008 Junio C Hamano
+#
+# The "pre-rebase" hook is run just before "git rebase" starts doing
+# its job, and can prevent the command from running by exiting with
+# non-zero status.
+#
+# The hook is called with the following parameters:
+#
+# $1 -- the upstream the series was forked from.
+# $2 -- the branch being rebased (or empty when rebasing the current branch).
+#
+# This sample shows how to prevent topic branches that are already
+# merged to 'next' branch from getting rebased, because allowing it
+# would result in rebasing already published history.
+
+publish=next
+basebranch="$1"
+if test "$#" = 2
+then
+	topic="refs/heads/$2"
+else
+	topic=`git symbolic-ref HEAD` ||
+	exit 0 ;# we do not interrupt rebasing detached HEAD
+fi
+
+case "$topic" in
+refs/heads/??/*)
+	;;
+*)
+	exit 0 ;# we do not interrupt others.
+	;;
+esac
+
+# Now we are dealing with a topic branch being rebased
+# on top of master.  Is it OK to rebase it?
+
+# Does the topic really exist?
+git show-ref -q "$topic" || {
+	echo >&2 "No such branch $topic"
+	exit 1
+}
+
+# Is topic fully merged to master?
+not_in_master=`git rev-list --pretty=oneline ^master "$topic"`
+if test -z "$not_in_master"
+then
+	echo >&2 "$topic is fully merged to master; better remove it."
+	exit 1 ;# we could allow it, but there is no point.
+fi
+
+# Is topic ever merged to next?  If so you should not be rebasing it.
+only_next_1=`git rev-list ^master "^$topic" ${publish} | sort`
+only_next_2=`git rev-list ^master           ${publish} | sort`
+if test "$only_next_1" = "$only_next_2"
+then
+	not_in_topic=`git rev-list "^$topic" master`
+	if test -z "$not_in_topic"
+	then
+		echo >&2 "$topic is already up to date with master"
+		exit 1 ;# we could allow it, but there is no point.
+	else
+		exit 0
+	fi
+else
+	not_in_next=`git rev-list --pretty=oneline ^${publish} "$topic"`
+	/usr/bin/perl -e '
+		my $topic = $ARGV[0];
+		my $msg = "* $topic has commits already merged to public branch:\n";
+		my (%not_in_next) = map {
+			/^([0-9a-f]+) /;
+			($1 => 1);
+		} split(/\n/, $ARGV[1]);
+		for my $elem (map {
+				/^([0-9a-f]+) (.*)$/;
+				[$1 => $2];
+			} split(/\n/, $ARGV[2])) {
+			if (!exists $not_in_next{$elem->[0]}) {
+				if ($msg) {
+					print STDERR $msg;
+					undef $msg;
+				}
+				print STDERR " $elem->[1]\n";
+			}
+		}
+	' "$topic" "$not_in_next" "$not_in_master"
+	exit 1
+fi
+
+<<\DOC_END
+
+This sample hook safeguards topic branches that have been
+published from being rewound.
+
+The workflow assumed here is:
+
+ * Once a topic branch forks from "master", "master" is never
+   merged into it again (either directly or indirectly).
+
+ * Once a topic branch is fully cooked and merged into "master",
+   it is deleted.  If you need to build on top of it to correct
+   earlier mistakes, a new topic branch is created by forking at
+   the tip of the "master".  This is not strictly necessary, but
+   it makes it easier to keep your history simple.
+
+ * Whenever you need to test or publish your changes to topic
+   branches, merge them into "next" branch.
+
+The script, being an example, hardcodes the publish branch name
+to be "next", but it is trivial to make it configurable via
+$GIT_DIR/config mechanism.
+
+With this workflow, you would want to know:
+
+(1) ... if a topic branch has ever been merged to "next".  Young
+    topic branches can have stupid mistakes you would rather
+    clean up before publishing, and things that have not been
+    merged into other branches can be easily rebased without
+    affecting other people.  But once it is published, you would
+    not want to rewind it.
+
+(2) ... if a topic branch has been fully merged to "master".
+    Then you can delete it.  More importantly, you should not
+    build on top of it -- other people may already want to
+    change things related to the topic as patches against your
+    "master", so if you need further changes, it is better to
+    fork the topic (perhaps with the same name) afresh from the
+    tip of "master".
+
+Let's look at this example:
+
+		   o---o---o---o---o---o---o---o---o---o "next"
+		  /       /           /           /
+		 /   a---a---b A     /           /
+		/   /               /           /
+	       /   /   c---c---c---c B         /
+	      /   /   /             \         /
+	     /   /   /   b---b C     \       /
+	    /   /   /   /             \     /
+    ---o---o---o---o---o---o---o---o---o---o---o "master"
+
+
+A, B and C are topic branches.
+
+ * A has one fix since it was merged up to "next".
+
+ * B has finished.  It has been fully merged up to "master" and "next",
+   and is ready to be deleted.
+
+ * C has not merged to "next" at all.
+
+We would want to allow C to be rebased, refuse A, and encourage
+B to be deleted.
+
+To compute (1):
+
+	git rev-list ^master ^topic next
+	git rev-list ^master        next
+
+	if these match, topic has not merged in next at all.
+
+To compute (2):
+
+	git rev-list master..topic
+
+	if this is empty, it is fully merged to "master".
+
+DOC_END
+
+
+----------------------------------------------------------------
+CONTENT OF .git\hooks\pre-receive.sample
+----------------------------------------------------------------
+
+#!/bin/sh
+#
+# An example hook script to make use of push options.
+# The example simply echoes all push options that start with 'echoback='
+# and rejects all pushes when the "reject" push option is used.
+#
+# To enable this hook, rename this file to "pre-receive".
+
+if test -n "$GIT_PUSH_OPTION_COUNT"
+then
+	i=0
+	while test "$i" -lt "$GIT_PUSH_OPTION_COUNT"
+	do
+		eval "value=\$GIT_PUSH_OPTION_$i"
+		case "$value" in
+		echoback=*)
+			echo "echo from the pre-receive-hook: ${value#*=}" >&2
+			;;
+		reject)
+			exit 1
+		esac
+		i=$((i + 1))
+	done
+fi
+
+
+----------------------------------------------------------------
+CONTENT OF .git\hooks\prepare-commit-msg.sample
+----------------------------------------------------------------
+
+#!/bin/sh
+#
+# An example hook script to prepare the commit log message.
+# Called by "git commit" with the name of the file that has the
+# commit message, followed by the description of the commit
+# message's source.  The hook's purpose is to edit the commit
+# message file.  If the hook fails with a non-zero status,
+# the commit is aborted.
+#
+# To enable this hook, rename this file to "prepare-commit-msg".
+
+# This hook includes three examples. The first one removes the
+# "# Please enter the commit message..." help message.
+#
+# The second includes the output of "git diff --name-status -r"
+# into the message, just before the "git status" output.  It is
+# commented because it doesn't cope with --amend or with squashed
+# commits.
+#
+# The third example adds a Signed-off-by line to the message, that can
+# still be edited.  This is rarely a good idea.
+
+COMMIT_MSG_FILE=$1
+COMMIT_SOURCE=$2
+SHA1=$3
+
+/usr/bin/perl -i.bak -ne 'print unless(m/^. Please enter the commit message/..m/^#$/)' "$COMMIT_MSG_FILE"
+
+# case "$COMMIT_SOURCE,$SHA1" in
+#  ,|template,)
+#    /usr/bin/perl -i.bak -pe '
+#       print "\n" . `git diff --cached --name-status -r`
+# 	 if /^#/ && $first++ == 0' "$COMMIT_MSG_FILE" ;;
+#  *) ;;
+# esac
+
+# SOB=$(git var GIT_COMMITTER_IDENT | sed -n 's/^\(.*>\).*$/Signed-off-by: \1/p')
+# git interpret-trailers --in-place --trailer "$SOB" "$COMMIT_MSG_FILE"
+# if test -z "$COMMIT_SOURCE"
+# then
+#   /usr/bin/perl -i.bak -pe 'print "\n" if !$first_line++' "$COMMIT_MSG_FILE"
+# fi
+
+
+----------------------------------------------------------------
+CONTENT OF .git\hooks\push-to-checkout.sample
+----------------------------------------------------------------
+
+#!/bin/sh
+
+# An example hook script to update a checked-out tree on a git push.
+#
+# This hook is invoked by git-receive-pack(1) when it reacts to git
+# push and updates reference(s) in its repository, and when the push
+# tries to update the branch that is currently checked out and the
+# receive.denyCurrentBranch configuration variable is set to
+# updateInstead.
+#
+# By default, such a push is refused if the working tree and the index
+# of the remote repository has any difference from the currently
+# checked out commit; when both the working tree and the index match
+# the current commit, they are updated to match the newly pushed tip
+# of the branch. This hook is to be used to override the default
+# behaviour; however the code below reimplements the default behaviour
+# as a starting point for convenient modification.
+#
+# The hook receives the commit with which the tip of the current
+# branch is going to be updated:
+commit=$1
+
+# It can exit with a non-zero status to refuse the push (when it does
+# so, it must not modify the index or the working tree).
+die () {
+	echo >&2 "$*"
+	exit 1
+}
+
+# Or it can make any necessary changes to the working tree and to the
+# index to bring them to the desired state when the tip of the current
+# branch is updated to the new commit, and exit with a zero status.
+#
+# For example, the hook can simply run git read-tree -u -m HEAD "$1"
+# in order to emulate git fetch that is run in the reverse direction
+# with git push, as the two-tree form of git read-tree -u -m is
+# essentially the same as git switch or git checkout that switches
+# branches while keeping the local changes in the working tree that do
+# not interfere with the difference between the branches.
+
+# The below is a more-or-less exact translation to shell of the C code
+# for the default behaviour for git's push-to-checkout hook defined in
+# the push_to_deploy() function in builtin/receive-pack.c.
+#
+# Note that the hook will be executed from the repository directory,
+# not from the working tree, so if you want to perform operations on
+# the working tree, you will have to adapt your code accordingly, e.g.
+# by adding "cd .." or using relative paths.
+
+if ! git update-index -q --ignore-submodules --refresh
+then
+	die "Up-to-date check failed"
+fi
+
+if ! git diff-files --quiet --ignore-submodules --
+then
+	die "Working directory has unstaged changes"
+fi
+
+# This is a rough translation of:
+#
+#   head_has_history() ? "HEAD" : EMPTY_TREE_SHA1_HEX
+if git cat-file -e HEAD 2>/dev/null
+then
+	head=HEAD
+else
+	head=$(git hash-object -t tree --stdin </dev/null)
+fi
+
+if ! git diff-index --quiet --cached --ignore-submodules $head --
+then
+	die "Working directory has staged changes"
+fi
+
+if ! git read-tree -u -m "$commit"
+then
+	die "Could not update working tree to new HEAD"
+fi
+
+
+----------------------------------------------------------------
+CONTENT OF .git\hooks\update.sample
+----------------------------------------------------------------
+
+#!/bin/sh
+#
+# An example hook script to block unannotated tags from entering.
+# Called by "git receive-pack" with arguments: refname sha1-old sha1-new
+#
+# To enable this hook, rename this file to "update".
+#
+# Config
+# ------
+# hooks.allowunannotated
+#   This boolean sets whether unannotated tags will be allowed into the
+#   repository.  By default they won't be.
+# hooks.allowdeletetag
+#   This boolean sets whether deleting tags will be allowed in the
+#   repository.  By default they won't be.
+# hooks.allowmodifytag
+#   This boolean sets whether a tag may be modified after creation. By default
+#   it won't be.
+# hooks.allowdeletebranch
+#   This boolean sets whether deleting branches will be allowed in the
+#   repository.  By default they won't be.
+# hooks.denycreatebranch
+#   This boolean sets whether remotely creating branches will be denied
+#   in the repository.  By default this is allowed.
+#
+
+# --- Command line
+refname="$1"
+oldrev="$2"
+newrev="$3"
+
+# --- Safety check
+if [ -z "$GIT_DIR" ]; then
+	echo "Don't run this script from the command line." >&2
+	echo " (if you want, you could supply GIT_DIR then run" >&2
+	echo "  $0 <ref> <oldrev> <newrev>)" >&2
+	exit 1
+fi
+
+if [ -z "$refname" -o -z "$oldrev" -o -z "$newrev" ]; then
+	echo "usage: $0 <ref> <oldrev> <newrev>" >&2
+	exit 1
+fi
+
+# --- Config
+allowunannotated=$(git config --type=bool hooks.allowunannotated)
+allowdeletebranch=$(git config --type=bool hooks.allowdeletebranch)
+denycreatebranch=$(git config --type=bool hooks.denycreatebranch)
+allowdeletetag=$(git config --type=bool hooks.allowdeletetag)
+allowmodifytag=$(git config --type=bool hooks.allowmodifytag)
+
+# check for no description
+projectdesc=$(sed -e '1q' "$GIT_DIR/description")
+case "$projectdesc" in
+"Unnamed repository"* | "")
+	echo "*** Project description file hasn't been set" >&2
+	exit 1
+	;;
+esac
+
+# --- Check types
+# if $newrev is 0000...0000, it's a commit to delete a ref.
+zero=$(git hash-object --stdin </dev/null | tr '[0-9a-f]' '0')
+if [ "$newrev" = "$zero" ]; then
+	newrev_type=delete
+else
+	newrev_type=$(git cat-file -t $newrev)
+fi
+
+case "$refname","$newrev_type" in
+	refs/tags/*,commit)
+		# un-annotated tag
+		short_refname=${refname##refs/tags/}
+		if [ "$allowunannotated" != "true" ]; then
+			echo "*** The un-annotated tag, $short_refname, is not allowed in this repository" >&2
+			echo "*** Use 'git tag [ -a | -s ]' for tags you want to propagate." >&2
+			exit 1
+		fi
+		;;
+	refs/tags/*,delete)
+		# delete tag
+		if [ "$allowdeletetag" != "true" ]; then
+			echo "*** Deleting a tag is not allowed in this repository" >&2
+			exit 1
+		fi
+		;;
+	refs/tags/*,tag)
+		# annotated tag
+		if [ "$allowmodifytag" != "true" ] && git rev-parse $refname > /dev/null 2>&1
+		then
+			echo "*** Tag '$refname' already exists." >&2
+			echo "*** Modifying a tag is not allowed in this repository." >&2
+			exit 1
+		fi
+		;;
+	refs/heads/*,commit)
+		# branch
+		if [ "$oldrev" = "$zero" -a "$denycreatebranch" = "true" ]; then
+			echo "*** Creating a branch is not allowed in this repository" >&2
+			exit 1
+		fi
+		;;
+	refs/heads/*,delete)
+		# delete branch
+		if [ "$allowdeletebranch" != "true" ]; then
+			echo "*** Deleting a branch is not allowed in this repository" >&2
+			exit 1
+		fi
+		;;
+	refs/remotes/*,commit)
+		# tracking branch
+		;;
+	refs/remotes/*,delete)
+		# delete tracking branch
+		if [ "$allowdeletebranch" != "true" ]; then
+			echo "*** Deleting a tracking branch is not allowed in this repository" >&2
+			exit 1
+		fi
+		;;
+	*)
+		# Anything else (is there anything else?)
+		echo "*** Update hook: unknown type of update to ref $refname of type $newrev_type" >&2
+		exit 1
+		;;
+esac
+
+# --- Finished
+exit 0
+
+
+----------------------------------------------------------------
+CONTENT OF .git\info\exclude
+----------------------------------------------------------------
+
+# git ls-files --others --exclude-from=.git/info/exclude
+# Lines that start with '#' are comments.
+# For a project mostly in C, the following would be a good set of
+# exclude patterns (uncomment them if you want to use them):
+# *.[oa]
+# *~
+
+
+----------------------------------------------------------------
+CONTENT OF config\openrouter.py
+----------------------------------------------------------------
+
+MODELS = {
+    "meta-llama/llama-3-70b-instruct": {
+        "context": 8192,
+        "providers": {
+            "DeepInfra": {"input": 0.59, "output": 0.79, "latency": 0.45},
+        },
+    },
+    "mistralai/mixtral-8x7b-instruct": {
+        "context": 32768,
+        "providers": {
+            "DeepInfra": {"input": 0.24, "output": 0.24, "latency": 0.55},
+        },
+    },
+    "mistralai/mistral-7b-instruct:nitro": {
+        "context": 32768,
+        "providers": {
+            "Lepton": {"input": 0.11, "output": 0.11, "latency": 0.73},
+            "Fireworks": {"input": 0.2, "output": 0.2, "latency": 0.13},
+        },
+    },
+    "microsoft/wizardlm-2-8x22b": {
+        "context": 65536,
+        "providers": {
+            "DeepInfra": {
+                "input": 0.65,
+                "output": 0.65,
+                "latency": 0.58,
+                "max_output": 65536,
+            },
+            "NovitaAI": {
+                "input": 0.64,
+                "output": 0.64,
+                "latency": 2.14,
+                "max_output": 65536,
+            },
+        },
+    },
+    "openai/gpt-3.5-turbo-0125": {
+        "context": 16385,
+        "providers": {
+            "OpenAI": {"input": 0.5, "output": 1.5, "latency": 0.63},
+        },
+    },
+    "openai/gpt-4-turbo": {
+        "context": 128000,
+        "providers": {
+            "OpenAI": {"input": 10, "output": 30, "latency": 1.34},
+        },
+    },
+    "openai/gpt-4o": {
+        "context": 128000,
+        "providers": {
+            "OpenAI": {"input": 5, "output": 15, "max_output": 4096, "latency": 0.74},
+        },
+    },
+    "openai/gpt-4o-mini": {
+        "context": 128000,
+        "providers": {
+            "OpenAI": {
+                "input": 0.15,
+                "output": 0.6,
+                "input_img": 7.225,
+                "max_output": 16384,
+                "latency": 0.54,
+                "tps": 73.3,
+            },
+        },
+    },
+    "anthropic/claude-3.5-sonnet": {
+        "context": 200000,
+        "providers": {
+            "Anthropic": {"input": 3, "output": 15, "latency": 1.8, "max_output": 4096},
+        },
+    },
+    "google/gemini-pro-1.5": {
+        "context": 2800000,
+        "providers": {
+            "Google": {
+                "input": 2.5,
+                "output": 7.5,
+                "max_output": 22937,
+                "latency": 1.42,
+                "tps": 59.94,
+            },
+        },
+    },
+    "meta-llama/llama-3-8b-instruct:free": {"context": 8192},
+    "mistralai/mistral-7b-instruct:free": {"context": 32768},
+}
+
+DEFAULT_FREE_MODEL = "meta-llama/llama-3-8b-instruct:free"
+DEFAULT_CHEAP_MODEL = "openai/gpt-4o-mini"
+DEFAULT_SMART_MODEL = "openai/gpt-4o"
+
+MODEL_ALIASES = {
+    "DEFAULT_FREE_MODEL": DEFAULT_FREE_MODEL,
+    "DEFAULT_CHEAP_MODEL": DEFAULT_CHEAP_MODEL,
+    "DEFAULT_SMART_MODEL": DEFAULT_SMART_MODEL,
+}
+
+----------------------------------------------------------------
+CONTENT OF config\trafilatura.cfg
+----------------------------------------------------------------
+
+# Defines settings for trafilatura (https://github.com/adbar/trafilatura)
+
+[DEFAULT]
+
+# Download
+DOWNLOAD_TIMEOUT = 30
+MAX_FILE_SIZE = 20000000
+MIN_FILE_SIZE = 10
+# sleep between requests
+SLEEP_TIME = 5
+# user-agents here: agent1,agent2,...
+USER_AGENTS =
+# cookie for HTTP requests
+COOKIE =
+# Maximum number of redirects that we will follow
+MAX_REDIRECTS = 2
+
+# Extraction
+MIN_EXTRACTED_SIZE = 1500
+# MIN_EXTRACTED_SIZE = 250 
+# increased to increase recall
+# eg for https://www.artificialintelligence-news.com/ extracted only
+# cookie consent text, even with favor_recall = True
+MIN_EXTRACTED_COMM_SIZE = 1
+MIN_OUTPUT_SIZE = 1
+MIN_OUTPUT_COMM_SIZE = 1
+
+# CLI file processing only, set to 0 to disable
+EXTRACTION_TIMEOUT = 30
+
+# Deduplication
+MIN_DUPLCHECK_SIZE = 100
+MAX_REPETITIONS = 2
+
+# Extraction option for Htmldate
+EXTENSIVE_DATE_SEARCH = on
+
+# URLs in feeds and sitemaps
+EXTERNAL_URLS = off
+
+
+
+----------------------------------------------------------------
+CONTENT OF config\web_config.py
+----------------------------------------------------------------
+
+default_header_template = {
+    "User-Agent": "",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*"
+    ";q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+    "Referer": "https://www.google.com/",
+    "DNT": "1",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+}
+
+----------------------------------------------------------------
+CONTENT OF config\extras\llm-openrouter-schemas.md
+----------------------------------------------------------------
+
+# Openrouter API Schemas
+
+## Headers
+
+```python
+#   extra_headers={
+#     "HTTP-Referer": $YOUR_SITE_URL, # Optional, for including your app on openrouter.ai rankings.
+#     "X-Title": $YOUR_APP_NAME, # Optional. Shows in rankings on openrouter.ai.
+#   },
+```
+
+## Request
+
+Here is the TypeScript definition of the request object that you can send to the Openrouter API.
+
+```typescript
+// Definitions of subtypes are below
+type Request = {
+  // Either "messages" or "prompt" is required
+  messages?: Message[];
+  prompt?: string;
+
+  // If "model" is unspecified, uses the user's default
+  model?: string; // See "Supported Models" section
+
+  // Allows to force the model to produce specific output format.
+  // Only supported by OpenAI models, Nitro models, and some others - check the
+  // providers on the model page on openrouter.ai/models to see if it's supported,
+  // and set `require_parameters` to true in your Provider Preferences. See
+  // openrouter.ai/docs#provider-routing
+  response_format?: { type: 'json_object' };
+
+  stop?: string | string[];
+  stream?: boolean; // Enable streaming
+
+  // See LLM Parameters (openrouter.ai/docs#parameters)
+  max_tokens?: number; // Range: [1, context_length)
+  temperature?: number; // Range: [0, 2]
+  top_p?: number; // Range: (0, 1]
+  top_k?: number; // Range: [1, Infinity) Not available for OpenAI models
+  frequency_penalty?: number; // Range: [-2, 2]
+  presence_penalty?: number; // Range: [-2, 2]
+  repetition_penalty?: number; // Range: (0, 2]
+  seed?: number; // OpenAI only
+
+  // Function-calling
+  // Only natively suported by OpenAI models. For others, we submit
+  // a YAML-formatted string with these tools at the end of the prompt.
+  tools?: Tool[];
+  tool_choice?: ToolChoice;
+
+  // Additional optional parameters
+  logit_bias?: { [key: number]: number };
+
+  // OpenRouter-only parameters
+  // See "Prompt Transforms" section: openrouter.ai/docs#transforms
+  transforms?: string[];
+  // See "Model Routing" section: openrouter.ai/docs#model-routing
+  models?: string[];
+  route?: 'fallback';
+  // See "Provider Routing" section: openrouter.ai/docs#provider-routing
+  provider?: ProviderPreferences;
+};
+
+// Subtypes:
+
+type TextContent = {
+  type: 'text';
+  text: string;
+};
+
+type ImageContentPart = {
+  type: 'image_url';
+  image_url: {
+    url: string; // URL or base64 encoded image data
+    detail?: string; // Optional, defaults to 'auto'
+  };
+};
+
+type ContentPart = TextContent | ImageContentPart;
+
+type Message = {
+  role: 'user' | 'assistant' | 'system' | 'tool';
+  // ContentParts are only for the 'user' role:
+  content: string | ContentPart[];
+  // If "name" is included, it will be prepended like this
+  // for non-OpenAI models: `{name}: {content}`
+  name?: string;
+};
+
+type FunctionDescription = {
+  description?: string;
+  name: string;
+  parameters: object; // JSON Schema object
+};
+
+type Tool = {
+  type: 'function';
+  function: FunctionDescription;
+};
+
+type ToolChoice =
+  | 'none'
+  | 'auto'
+  | {
+      type: 'function';
+      function: {
+        name: string;
+      };
+    };
+```
+
+## Response
+
+Here is the TypeScript definition of the response object returned by the Openrouter API.
+
+```typescript
+// Definitions of subtypes are below
+
+type Response = {
+  id: string;
+  // Depending on whether you set "stream" to "true" and
+  // whether you passed in "messages" or a "prompt", you
+  // will get a different output shape
+  choices: (NonStreamingChoice | StreamingChoice | NonChatChoice | Error)[];
+  created: number; // Unix timestamp
+  model: string;
+  object: "chat.completion" | "chat.completion.chunk";
+  // For non-streaming responses only. For streaming responses,
+  // see "Querying Cost and Stats" below.
+  usage?: {
+    completion_tokens: number; // Equivalent to "native_tokens_completion" in the /generation API
+    prompt_tokens: number; // Equivalent to "native_tokens_prompt"
+    total_tokens: number; // Sum of the above two fields
+  };
+};
+
+// Subtypes:
+
+type NonChatChoice = {
+  finish_reason: string | null;
+  text: string;
+};
+
+type NonStreamingChoice = {
+  finish_reason: string | null; // Depends on the model. Ex: 'stop' | 'length' | 'content_filter' | 'tool_calls' | 'function_call'
+  message: {
+    content: string | null;
+    role: string;
+    tool_calls?: ToolCall[];
+    // Deprecated, replaced by tool_calls
+    function_call?: FunctionCall;
+  };
+};
+
+type StreamingChoice = {
+  finish_reason: string | null;
+  delta: {
+    content: string | null;
+    role?: string;
+    tool_calls?: ToolCall[];
+    // Deprecated, replaced by tool_calls
+    function_call?: FunctionCall;
+  };
+};
+
+type Error = {
+  code: number; // See "Error Handling" section
+  message: string;
+};
+
+type FunctionCall = {
+  name: string;
+  arguments: string; // JSON format arguments
+};
+
+type ToolCall = {
+  id: string;
+  type: "function";
+  function: FunctionCall;
+};
+```
+
+
+----------------------------------------------------------------
+CONTENT OF config\extras\serpapi-schemas.py
+----------------------------------------------------------------
+
+ORGANIC_RESULTS = [
+    {
+        "position": 1,
+        "title": "Coffee - Wikipedia",
+        "link": "https://en.wikipedia.org/wiki/Coffee",
+        "displayed_link": "https://en.wikipedia.org › wiki › Coffee",
+        "snippet": "Coffee is a brewed drink prepared from roasted coffee beans, the seeds of berries from certain Coffea species. From the coffee fruit, the seeds are ...",
+        "sitelinks": {
+            "inline": [
+                {
+                    "title": "History",
+                    "link": "https://en.wikipedia.org/wiki/History_of_coffee",
+                },
+                {
+                    "title": "Coffee bean",
+                    "link": "https://en.wikipedia.org/wiki/Coffee_bean",
+                },
+                {
+                    "title": "Coffee preparation",
+                    "link": "https://en.wikipedia.org/wiki/Coffee_preparation",
+                },
+                {
+                    "title": "Coffee production",
+                    "link": "https://en.wikipedia.org/wiki/Coffee_production",
+                },
+            ]
+        },
+        "rich_snippet": {
+            "bottom": {
+                "extensions": [
+                    "Region of origin: Horn of Africa and ‎South Ara...‎",
+                    "Color: Black, dark brown, light brown, beige",
+                    "Introduced: 15th century",
+                ],
+                "detected_extensions": {"introduced_th_century": 15},
+            }
+        },
+        "about_this_result": {
+            "source": {
+                "description": "Wikipedia is a free content, multilingual online encyclopedia written and maintained by a community of volunteers through a model of open collaboration, using a wiki-based editing system. Individual contributors, also called editors, are known as Wikipedians.",
+                "source_info_link": "https://en.wikipedia.org/wiki/Wikipedia",
+                "security": "secure",
+                "icon": "https://serpapi.com/searches/6165916694c6c7025deef5ab/images/ed8bda76b255c4dc4634911fb134de53068293b1c92f91967eef45285098b61516f2cf8b6f353fb18774013a1039b1fb.png",
+            },
+            "keywords": ["coffee"],
+            "languages": ["English"],
+            "regions": ["the United States"],
+        },
+        "cached_page_link": "https://webcache.googleusercontent.com/search?q=cache:U6oJMnF-eeUJ:https://en.wikipedia.org/wiki/Coffee+&cd=4&hl=en&ct=clnk&gl=us",
+        "related_pages_link": "https://www.google.com/search?q=related:https://en.wikipedia.org/wiki/Coffee+Coffee",
+    }
+]
+
+
+----------------------------------------------------------------
+CONTENT OF utils\algo.py
+----------------------------------------------------------------
+
+import hashlib
+
+def hash_strings(strings: list[str]) -> str:
+    # Concatenate all the strings in the list
+    concatenated_string = ''.join(strings)
+
+    # Create a hash object
+    hash_object = hashlib.md5()
+
+    # Update the hash object with the concatenated string
+    hash_object.update(concatenated_string.encode('utf-8'))
+
+    # Get the hexadecimal representation of the hash
+    hash_value = hash_object.hexdigest()
+
+    # Return the hash value
+    return hash_value
+
+----------------------------------------------------------------
+CONTENT OF utils\async_utils.py
+----------------------------------------------------------------
+
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+
+# NOTE: consider using async_to_sync from asgiref.sync library
+
+
+def run_task_sync(task):
+    """
+    Run an asyncio task (more precisely, a coroutine object, such as the result of
+    calling an async function) synchronously.
+    """
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(asyncio.run, task)
+        return future.result()
+
+
+def make_sync(async_func):
+    """
+    Make an asynchronous function synchronous.
+    """
+
+    def wrapper(*args, **kwargs):
+        return run_task_sync(async_func(*args, **kwargs))
+
+    return wrapper
+
+
+def gather_tasks_sync(tasks):
+    """
+    Run a list of asyncio tasks synchronously.
+    """
+
+    async def coroutine_from_tasks():
+        return await asyncio.gather(*tasks)
+
+    return run_task_sync(coroutine_from_tasks())
+
+
+----------------------------------------------------------------
+CONTENT OF utils\core.py
+----------------------------------------------------------------
+
+import json
+import os
+from pprint import pprint
+
+DELIMITER = "-" * 80 + "\n\n"
+
+def load_text_file(file_path: str) -> str:
+    with open(file_path, "r", encoding="utf-8") as f:
+        return f.read()
+    
+def save_text_to_file(text: str, file_path: str):
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(text)
+        
+def load_json_file(file_path: str) -> dict:
+    with open(file_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+    
+def save_json_file(data: dict, file_path: str):
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4)
+
+def ensure_dir_exists(*path_parts):
+    dir_path = os.path.join(*path_parts)
+    os.makedirs(dir_path, exist_ok=True)
+    return dir_path
+   
+def pprint_and_wait(*args):
+    for arg in args:
+        pprint(arg)
+    input("Press Enter to continue...")
+
+def format_model_name(model_name: str) -> str:
+    return model_name.split("/")[-1].replace(":", "-")
+
+
+----------------------------------------------------------------
+CONTENT OF utils\ingest.py
+----------------------------------------------------------------
+
+from pypdf import PdfReader
+
+
+def get_page_texts_from_pdf(file):
+    reader = PdfReader(file)
+    return [page.extract_text() for page in reader.pages]
+
+
+DEFAULT_PAGE_START = "PAGE {page_num}:\n"
+DEFAULT_PAGE_SEP = "\n" + "-" * 3 + "\n\n"
+
+
+def get_text_from_pdf(file, page_start=DEFAULT_PAGE_START, page_sep=DEFAULT_PAGE_SEP):
+    return page_sep.join(
+        [
+            page_start.format(page_num=i) + x
+            for i, x in enumerate(get_page_texts_from_pdf(file), start=1)
+        ]
+    )
+
+
+----------------------------------------------------------------
+CONTENT OF utils\llm.py
+----------------------------------------------------------------
+
+from os import getenv
+
+from openai import NOT_GIVEN, OpenAI
+from openai.resources.chat.completions import ChatCompletionMessageParam as ChatMessage
+
+from config.openrouter import MODELS
+
+
+class OpenRouterLLM:
+    # Global settings that can be overridden by instance settings
+    config = None
+    client = None
+
+    def __init__(self, client: OpenAI | None = None, config=None, **settings):
+        self._initialize_global_settings()
+        if client is not None:
+            self.client = client
+        if config is not None:
+            self.config = config
+        self.settings = settings
+        self.stream_status = "NOT_STREAMING"
+
+    @classmethod
+    def _initialize_global_settings(cls):
+        if cls.config and cls.client:
+            return
+        cls.config = {"MODELS": MODELS}
+        cls.client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=getenv("OPENROUTER_API_KEY"),
+        )
+
+    def _get_provider_param(self, model):
+        try:
+            model_config = self.config["MODELS"][model]
+            return {"provider": {"order": list(model_config["providers"].keys())}}
+        except KeyError:
+            return {}
+
+    def _get_settings(self, stream, messages, model, temperature, **kwargs):
+        # If messages is a string (single prompt), convert it to a list of ChatMessage
+        if isinstance(messages, str):
+            messages = [get_user_message(messages)]
+
+        settings = {"model": model, "temperature": temperature}
+        settings |= {"messages": messages, "stream": stream} | kwargs
+
+        # Remove NOT_GIVEN values
+        settings = {k: v for k, v in settings.items() if v is not NOT_GIVEN}
+
+        # Merge instance settings with provided settings
+        settings = self.settings | settings
+
+        # Add providers (if configured) but only if they are not already set
+        if "provider" not in settings.get("extra_body", {}):
+            if provider_param := self._get_provider_param(settings.get("model")):
+                settings.setdefault("extra_body", {}).update(provider_param)
+        return settings
+
+    def invoke(
+        self,
+        messages: str | list[ChatMessage],
+        model=NOT_GIVEN,
+        temperature=NOT_GIVEN,
+        **kwargs,
+    ):
+        settings = self._get_settings(False, messages, model, temperature, **kwargs)
+        completion = self.client.chat.completions.create(**settings)
+        return completion.choices[0].message.content
+
+    def stream(
+        self,
+        messages: str | list[ChatMessage],
+        model=NOT_GIVEN,
+        temperature=NOT_GIVEN,
+        **kwargs,
+    ):
+        settings = self._get_settings(True, messages, model, temperature, **kwargs)
+        completion = self.client.chat.completions.create(**settings)
+        self.stream_status = "STARTED"
+        for chunk in completion:
+            if chunk.choices:
+                # Can be empty for last chunk if stream_options: {"include_usage": true}
+                if content := chunk.choices[0].delta.content:
+                    if self.stream_status == "STARTED":
+                        self.stream_status = "FIRST_CHUNK"
+                    else:
+                        self.stream_status = "IN_PROGRESS"
+                    yield content
+        self.stream_status = "NOT_STREAMING"
+
+
+def get_user_message(message: str) -> ChatMessage:
+    return {"role": "user", "content": message}
+
+
+def get_system_message(message: str) -> ChatMessage:
+    return {"role": "system", "content": message}
+
+
+def get_assistant_message(message: str) -> ChatMessage:
+    return {"role": "assistant", "content": message}
+
+
+def format_prompt(message: str) -> list[ChatMessage]:
+    return [get_user_message(message)]
+
+
+if __name__ == "__main__":
+    llm = OpenRouterLLM(model="openai/gpt-3.5-turbo")
+    response = llm.stream(
+        model="mistralai/mistral-7b-instruct:free",
+        messages=format_prompt("What is the capital of France?"),
+    )
+    for content in response:
+        if content:
+            print(content, end="")
+
+
+----------------------------------------------------------------
+CONTENT OF utils\log.py
+----------------------------------------------------------------
+
+import logging
+def setup_logger(name: str = "10spy") -> logging.Logger:
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)
+    if not logger.handlers:
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s"
+        )
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
+    return logger
+
+def get_logger(name: str = "10spy") -> logging.Logger:
+    return logging.getLogger(name)
+
+----------------------------------------------------------------
+CONTENT OF utils\openrouter.py
+----------------------------------------------------------------
+
+import requests
+import json
+
+OPENROUTER_BASE = "https://openrouter.ai"
+OPENROUTER_API_BASE = f"{OPENROUTER_BASE}/api/v1"
+
+
+def get_available_models():
+    try:
+        response = requests.get(f"{OPENROUTER_API_BASE}/models")
+        response.raise_for_status()
+        models = json.loads(response.text)["data"]
+        return [model["id"] for model in models]
+    except requests.exceptions.RequestException as e:
+        raise e
+
+----------------------------------------------------------------
+CONTENT OF utils\output.py
+----------------------------------------------------------------
+
+def format_error(e: Exception) -> str:
+    """
+    Format an exception to include both its type and message.
+
+    Args:
+    e (Exception): The exception to be formatted.
+
+    Returns:
+    str: A string representation of the exception, including its type and message.
+
+    Example:
+        try:
+            raise ValueError("An example error")
+        except ValueError as e:
+            formatted_exception = format_exception(e)
+            print(formatted_exception)  # Output: "ValueError: An example error"
+    """
+    try:
+        return f"{type(e).__name__}: {e}"
+    except Exception:
+        return f"Unknown error: {e}"
+
+
+----------------------------------------------------------------
+CONTENT OF utils\prompt_template.py
+----------------------------------------------------------------
+
+from string import Formatter
+
+
+class PromptTemplate:
+    """Template for handling and formatting strings with named placeholders.
+
+    Attributes:
+        template: The template string.
+        fields: List of fields (placeholders) in the template.
+    """
+
+    def __init__(self, template_string: str) -> None:
+        """Initialize the PromptTemplate with a template string.
+
+        Args:
+            template_string: The template string with placeholders.
+
+        Raises:
+            ValueError: If a field name is not a valid identifier.
+        """
+        self.template = template_string
+        self.fields = [f for _, f, _, _ in Formatter().parse(template_string) if f]
+
+        # Check for invalid fields (e.g. "{not a valid identifier}")
+        for field in self.fields:
+            if not field.isidentifier():
+                raise ValueError(
+                    f"Invalid field name: {field}\n"
+                    "If you want to include curly braces in the prompt, use double "
+                    "curly braces ({{}})."
+                )
+
+    def format(self, **inputs) -> str:
+        """Fill in the provided fields and raise an error if any field is missing.
+
+        Args:
+            **inputs: Key-value pairs of fields to be filled in the template.
+
+        Returns:
+            The formatted string.
+
+        Raises:
+            KeyError: If a field is missing in the inputs.
+        """
+        return self.template.format(**inputs)
+    
+    def format_partial(self, **inputs) -> str:
+        """Fill in the provided fields and leave missing fields as they are.
+
+        Args:
+            **inputs: Key-value pairs of fields to be filled in the template.
+
+        Returns:
+            The formatted string.
+        """
+        new_inputs = inputs | {k: "{" + k + "}" for k in self.fields if k not in inputs}
+        return self.template.format(**new_inputs)
+
+    def make_partial(self, **inputs) -> "PromptTemplate":
+        """Return a new PromptTemplate instance with some fields filled in.
+
+        Args:
+            **inputs: Key-value pairs of fields to be filled in the template.
+
+        Returns:
+            A new instance with partially filled fields.
+        """
+        return PromptTemplate(self.format_partial(**inputs))
+
+
+----------------------------------------------------------------
+CONTENT OF utils\strings.py
+----------------------------------------------------------------
+
+import json
+
+
+def extract_json(text: str):
+    """
+    Extract a single JSON object or array from a string. Determines the first
+    occurrence of '{' or '[', and the last occurrence of '}' or ']', then
+    extracts the JSON structure accordingly. Returns a dictionary or list on
+    success, throws on parse errors, including a bracket mismatch.
+    """
+    length = len(text)
+    first_curly_brace = text.find("{")
+    last_curly_brace = text.rfind("}")
+    first_square_brace = text.find("[")
+    last_square_brace = text.rfind("]")
+
+    assert (
+        first_curly_brace + first_square_brace > -2
+    ), "No opening curly or square bracket found"
+
+    if first_curly_brace == -1:
+        first_curly_brace = length
+    elif first_square_brace == -1:
+        first_square_brace = length
+
+    assert (first_curly_brace < first_square_brace) == (
+        last_curly_brace > last_square_brace
+    ), "Mismatched curly and square brackets"
+
+    first = min(first_curly_brace, first_square_brace)
+    last = max(last_curly_brace, last_square_brace)
+
+    assert first < last, "No closing bracket found"
+
+    return json.loads(text[first : last + 1])
+
+
+def extract_json_object(text: str) -> dict:
+    """
+    Extract a single JSON object from a string. Determines the first
+    occurrence of '{' and the last occurrence of '}', then
+    extracts the JSON structure accordingly. Returns a dictionary on
+    success, throws on parse errors, including a bracket mismatch.
+    """
+    first_curly_brace = text.find("{")
+    last_curly_brace = text.rfind("}")
+
+    if first_curly_brace == -1 or last_curly_brace == -1:
+        raise ValueError("No JSON object found")
+
+    if first_curly_brace > last_curly_brace:
+        raise ValueError("Mismatched curly brackets")
+
+    try:
+        return json.loads(text[first_curly_brace : last_curly_brace + 1])
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Error parsing JSON: {e}")
+
+
+def extract_json_text(text: str, is_object=True) -> str:
+    return json.dumps(
+        extract_json_object(text) if is_object else extract_json(text), indent=2
+    )
+
+
+def format_with_dashes(input_string: str) -> str:
+    return input_string.lower().replace(" ", "-").replace("_", "-")
+
+
+----------------------------------------------------------------
+CONTENT OF utils\web.py
+----------------------------------------------------------------
+
+import asyncio
+import io
+import os
+from enum import Enum
+
+import aiohttp
+import trafilatura
+from bs4 import BeautifulSoup
+from fake_useragent import UserAgent
+from pydantic import BaseModel, Field
+from serpapi import GoogleSearch
+
+from config.web_config import default_header_template
+from utils.async_utils import make_sync
+from utils.ingest import get_text_from_pdf
+from utils.log import get_logger
+from utils.output import format_error
+
+logger = get_logger()
+
+
+class LinkData(BaseModel):
+    text: str | None = None
+    error: str | None = None
+    num_tokens: int | None = None
+
+    @classmethod
+    def from_raw_content(cls, content: str):
+        """
+        Return a LinkData instance from the HTML or plain text content of a URL.
+        """
+        if content.startswith("Error: "):
+            return cls(error=content)
+        if content.startswith(PDF_TEXT_PREFIX):
+            return cls(text=content[len(PDF_TEXT_PREFIX) :])
+        text = get_text_from_html(content)
+        if is_html_text_ok(text):
+            return cls(text=text)
+        return cls(text=text, error="UNACCEPTABLE_EXTRACTED_TEXT")
+
+
+class URLRetrievalData(BaseModel):
+    urls: list[str]
+    link_data_dict: dict[str, LinkData] = Field(default_factory=dict)
+    num_ok_urls: int = 0
+    idx_first_not_tried: int = 0  # different from len(link_data_dict) if urls repeat
+
+
+#       "position": 1,
+#       "title": "Coffee - Wikipedia",
+#       "link": "https://en.wikipedia.org/wiki/Coffee",
+#       "snippet": "Coffee is a brewed drink prepared from roasted coffee beans, the seeds of berries from certain Coffea species. From the coffee fruit, the seeds are ...",
+
+
+DEFAULT_PARAMS = {
+    "engine": "google",
+    # "q": "groupm",
+    # "location": "Austin, Texas, United States",
+    "google_domain": "google.com",
+    "gl": "us",
+    "hl": "en",
+    "api_key": os.getenv("SERP_API_KEY"),
+}
+
+
+def search_with_serp_api(queries: list[str], params: dict | None = None):
+    params = DEFAULT_PARAMS | (params or {})
+    res: dict[str, list] = {}
+    for query in queries:
+        params["q"] = query
+        logger.debug(f"Searching for: {query}")
+        search = GoogleSearch(params)
+        results = search.get_dict().get("organic_results")
+        if results:
+            for result in results[:3]:
+                logger.info(f"Title: {result.get('title')}")
+                logger.info(f"Link: {result.get('link')}")
+                logger.info(f"Snippet: {result.get('snippet')}")
+        else:
+            logger.warning(f"No results found for: {query}")
+
+        res[query] = results or []
+    return res
+
+
+BATCH_SIZE = 10
+
+
+def get_content_from_urls(urls: list[str]):
+    logger.info(f"Will fetch {len(urls)} urls")
+    res = URLRetrievalData(urls=urls)
+
+    # Fetch content from urls in batches
+    batch_fetcher = get_batch_url_fetcher()
+
+    while res.idx_first_not_tried < len(urls):
+        batch_urls = urls[
+            res.idx_first_not_tried : res.idx_first_not_tried + BATCH_SIZE
+        ]
+
+        logger.info(f"Fetching batch of {len(batch_urls)} urls")
+        batch_htmls = batch_fetcher(batch_urls)
+
+        # Process fetched content
+        for url, html in zip(batch_urls, batch_htmls):
+            link_data = LinkData.from_raw_content(html)
+            res.link_data_dict[url] = link_data
+            res.idx_first_not_tried += 1
+            if not link_data.error:
+                res.num_ok_urls += 1
+        logger.info("Fetched and processed batch of urls")
+
+    return res
+
+
+def get_batch_url_fetcher():
+    return make_sync(afetch_urls_in_parallel_aiohttp)
+    # def link_fetcher(links):
+    #     return make_sync(afetch_urls_in_parallel_playwright)(
+    #         links, callback=lambda url, html: print_no_newline(".")
+    #     )
+    # return link_fetcher
+
+
+AIOHTTP_TIMEOUT_MS = 10000
+
+
+async def afetch_urls_in_parallel_aiohttp(urls):
+    """
+    Asynchronously fetch multiple URLs in parallel using aiohttp.
+    Return the HTML content of each URL. If there is an error in a particular URL,
+    return the error message instead of that URL's content, starting with "Error: ".
+    """
+    timeout = aiohttp.ClientTimeout(total=AIOHTTP_TIMEOUT_MS / 1000)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        tasks = [afetch_url_aiohttp(session, url) for url in urls]
+        htmls = await asyncio.gather(*tasks)
+
+    return htmls
+
+
+PDF_TEXT_PREFIX = "PLAIN_TEXT[PDF]: "
+
+
+async def afetch_url_aiohttp(
+    session: aiohttp.ClientSession, url: str, retries=3, backoff_factor=0.5
+):
+    """
+    Asynchronously fetch a URL using an aiohttp session with retry and exponential backoff.
+    It extracts text from PDFs and returns HTML content otherwise.
+    """
+    header_template = default_header_template
+    header_template["User-Agent"] = UserAgent().random
+
+    for attempt in range(retries):
+        try:
+            async with session.get(url, headers=header_template) as response:
+                response.raise_for_status()  # Raises exception for 4xx/5xx errors
+
+                content_type = response.headers.get("Content-Type", "")
+                if "application/pdf" in content_type:
+                    # Handle PDF content
+                    pdf_content = await response.read()
+                    with io.BytesIO(pdf_content) as pdf_file:
+                        res = PDF_TEXT_PREFIX + get_text_from_pdf(pdf_file)
+                else:
+                    res = await response.text()
+                logger.info(f"Fetched URL: {url}")
+                return res
+
+        except Exception as e:
+            # NOTE: specialize to ClientError, asyncio.TimeoutError, etc.
+            if attempt == retries - 1:
+                logger.info(f"Error fetching URL: {url}")
+                logger.info(res := f"Error: {format_error(e)}")
+                return res
+            # Wait for a bit before retrying
+            sleep_time = backoff_factor * (2**attempt)  # Exponential backoff
+            await asyncio.sleep(sleep_time)
+
+
+class TextFromHtmlMode(Enum):
+    BASIC = "BASIC"
+    TRAFILATURA = "TRAFILATURA"
+
+
+def get_text_from_html(
+    html_content: str,
+    mode=TextFromHtmlMode.TRAFILATURA,
+    clean=True,
+    break_multi_headlines=False,
+) -> str:
+    """
+    Extract text from an HTML string.
+    """
+    if html_content.startswith("Error: "):
+        return html_content
+
+    if mode == TextFromHtmlMode.TRAFILATURA:
+        # https://trafilatura.readthedocs.io/en/latest/usage-python.html
+        text = trafilatura.extract(
+            html_content,
+            include_links=True,
+            favor_recall=True,
+            config=None,
+            settingsfile="./config/trafilatura.cfg",
+            output_format="txt",
+        )
+        # NOTE: can try extracting with different settings till get the length we want
+        clean = False  # trafilatura already does some cleaning
+    else:
+        soup = BeautifulSoup(html_content, "html.parser")
+        # Remove script and style elements
+        for script_or_style in soup(["script", "style"]):
+            script_or_style.extract()
+        text = soup.get_text()
+
+    if not text:  # it could be None
+        text = ""
+    elif clean:
+        text = clean_text(text, break_multi_headlines=break_multi_headlines)
+    return text
+
+
+MIN_WORDS_PER_URL_CONTENT = 80
+
+
+def is_html_text_ok(text: str) -> bool:
+    """
+    Return True if the text extracted from an HTML string appears to be from a
+    successfully fetched website.
+
+    Specifically, return True if it has at least MIN_WORDS_PER_URL_CONTENT words.
+    """
+    return len(text.split()) >= MIN_WORDS_PER_URL_CONTENT
+
+
+def clean_text(text: str, break_multi_headlines=False):
+    """
+    Perform some basic cleaning on text extracted from HTML, such as removing
+    consecutive blank lines and other unwanted whitespace.
+    """
+    # Break into lines and remove leading/trailing whitespace
+    lines = (line.strip() for line in text.splitlines())
+
+    if break_multi_headlines:
+        # Break multi-headlines (2+ spaces) into a line each
+        lines = (phrase.strip() for line in lines for phrase in line.split("  "))
+
+    lines = remove_consecutive_blank_lines(lines)
+    text = "\n".join(lines)
+    return text
+
+
+def remove_consecutive_blank_lines(
+    lines: list[str], max_consecutive_blank_lines=1
+) -> list[str]:
+    """Remove consecutive blank lines from a list of lines."""
+    new_lines = []
+    num_consecutive_blank_lines = 0
+    for line in lines:
+        if line:
+            # Non-blank line
+            num_consecutive_blank_lines = 0
+            new_lines.append(line)
+        else:
+            # Blank line
+            num_consecutive_blank_lines += 1
+            if num_consecutive_blank_lines <= max_consecutive_blank_lines:
+                new_lines.append(line)
+    return new_lines
+
+
+----------------------------------------------------------------
+CONTENT OF workflows\sequential.py
+----------------------------------------------------------------
+
+import os
+from typing import Callable
+
+from utils.core import save_text_to_file
+from utils.log import setup_logger
+from utils.prompt_template import PromptTemplate
+from workflow_engine import Task, WorkflowEngine
+
+logger = setup_logger()
+
+
+class SequentialWorkflow:
+    """Agentic workflow with sequential tasks (no branching or loops)."""
+
+    def __init__(
+        self,
+        workflow_engine: WorkflowEngine,
+        tasks: list[Task | PromptTemplate],
+        handle_task_end: Callable | None = None,
+        init_task_id: int = 1,
+        output_name_template: str = "task_{task_id}_output",  # For tasks w/o output_name
+        output_dir: str | None = None,
+    ):
+        self.workflow_engine = workflow_engine
+
+        # Convert PromptTemplate instances to Task instances
+        self.tasks = [
+            Task(prompt_template=t) if isinstance(t, PromptTemplate) else t
+            for t in tasks
+        ]
+
+        self.handle_task_end = handle_task_end  # Takes this instance and stream result
+        self.task_id = None
+        self.output_name_template = output_name_template
+        self.output_dir = output_dir
+
+    def stream(self):
+        for task in self.tasks:
+            self.task_id = task.task_id or ((self.task_id or 0) + 1)
+            prompt = task.prompt_template.format(**self.workflow_engine.inputs)
+            parser = task.output_parser
+
+            # Stream the output of the current task
+            stream_res = yield from self.workflow_engine.stream(
+                prompt, self.task_id, parser=task.output_parser
+            )
+
+            # Update the inputs with the output of the current task, save output etc.
+            if task.output_handler is not None:  # First, run the task's output handler
+                task.output_handler(stream_res.parsed_output)
+            if self.handle_task_end is not None:  # Then, the overall handler or...
+                self.handle_task_end(workflow=self, curr_task=task, response=stream_res)
+            else:  # ... or the default behavior
+                output_name = task.output_name or self.output_name_template.format(
+                    task_id=self.task_id
+                )
+                self.workflow_engine.inputs[output_name] = str(stream_res.parsed_output)
+
+                # Save output or parsed output (if an output directory is provided)
+                if (dir := self.output_dir) is not None:
+                    output_path = output_name.replace("_", "-")
+                    if parser is None:
+                        output_path = os.path.join(dir, f"{output_path}.txt")
+                        save_text_to_file(stream_res.llm_output, output_path)
+                        logger.info(f"Saved LLM output to '{output_path}'")
+                    else:
+                        # Assume it's JSON (otherwise should use handle_task_end)
+                        output_path = os.path.join(dir, f"{output_path}.json")
+                        save_text_to_file(str(stream_res.parsed_output), output_path)
+                        logger.info(f"Saved parsed output to '{output_path}'")
