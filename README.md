@@ -1,4 +1,6 @@
-# LightLang: A Lightweight Language Model Framework
+# LightLang: A Lightweight Framework for LLM Workflows
+
+[![License](https://img.shields.io/github/license/reasonmethis/lightlang)](LICENSE)
 
 An open-source mini-framework for using Large Language Models (LLMs) and building agentic workflows.
 
@@ -22,7 +24,6 @@ An open-source mini-framework for using Large Language Models (LLMs) and buildin
   - [Utilities](#utilities)
 - [Contributing](#contributing)
 - [License](#license)
-- [Acknowledgements](#acknowledgements)
 - [Contact](#contact)
 
 ## Introduction
