@@ -1,24 +1,40 @@
+import json
 from os import getenv
+from typing import Any
 
+import requests
 from openai import NOT_GIVEN, OpenAI
-from openai.resources.chat.completions import ChatCompletionMessageParam as ChatMessage
 
-from config.openrouter import MODELS
+from lightlang.llms.config.openrouter_config import OPENROUTER_MODEL_CONFIG
+from lightlang.llms.utils import get_user_message
+from lightlang.models import ChatMessage
+
+OPENROUTER_BASE = "https://openrouter.ai"
+OPENROUTER_API_BASE = f"{OPENROUTER_BASE}/api/v1"
 
 
 class OpenRouterLLM:
-    # Global settings that can be overridden by instance settings
-    config = None # Will be set to {"MODELS": MODELS} 
-    client = None # Will be set to OpenAI instance connected to OpenRouter API
+    """Interface for interacting with models via the OpenRouter API."""
 
-    def __init__(self, client: OpenAI | None = None, config=None, **settings):
+    # Global settings that can be overridden by instance settings
+    config = {"MODELS": OPENROUTER_MODEL_CONFIG}
+    client = OpenAI(
+        base_url=OPENROUTER_API_BASE,
+        api_key=getenv("OPENROUTER_API_KEY"),
+    )
+
+    def __init__(
+        self,
+        client: OpenAI | None = None,
+        config: dict[str, dict[str, Any]] | None = None,
+        **settings,
+    ):
         """Initialize the OpenRouterLLM instance.
-        
+
         The settings keyword arguments can (and usually should) include the following:
         - model: The model to use for completions (e.g., "openai/gpt-4o-mini").
         - temperature: The sampling temperature to use for completions.
         """
-        self._initialize_global_settings()
         if client is not None:
             self.client = client
         if config is not None:
@@ -26,20 +42,10 @@ class OpenRouterLLM:
         self.settings = settings
         self.stream_status = "NOT_STREAMING"
 
-    @classmethod
-    def _initialize_global_settings(cls):
-        if cls.config and cls.client:
-            return
-        cls.config = {"MODELS": MODELS}
-        cls.client = OpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=getenv("OPENROUTER_API_KEY"),
-        )
-
     def _get_provider_param(self, model):
         try:
             model_config = self.config["MODELS"][model]
-            return {"provider": {"order": list(model_config["providers"].keys())}}
+            return {"provider": {"order": list(model_config["providers"].keys())}}  # type: ignore
         except KeyError:
             return {}
 
@@ -62,6 +68,9 @@ class OpenRouterLLM:
             if provider_param := self._get_provider_param(settings.get("model")):
                 settings.setdefault("extra_body", {}).update(provider_param)
         return settings
+
+    def get_model_name(self) -> str | None:
+        return self.settings.get("model")
 
     def invoke(
         self,
@@ -96,24 +105,22 @@ class OpenRouterLLM:
         self.stream_status = "NOT_STREAMING"
 
 
-def get_user_message(message: str) -> ChatMessage:
-    return {"role": "user", "content": message}
+def format_prompt(prompt: str) -> list[ChatMessage]:
+    return [get_user_message(prompt)]
 
 
-def get_system_message(message: str) -> ChatMessage:
-    return {"role": "system", "content": message}
-
-
-def get_assistant_message(message: str) -> ChatMessage:
-    return {"role": "assistant", "content": message}
-
-
-def format_prompt(message: str) -> list[ChatMessage]:
-    return [get_user_message(message)]
+def get_available_models():
+    try:
+        response = requests.get(f"{OPENROUTER_API_BASE}/models")
+        response.raise_for_status()
+        models = json.loads(response.text)["data"]
+        return [model["id"] for model in models]
+    except requests.exceptions.RequestException as e:
+        raise e
 
 
 if __name__ == "__main__":
-    llm = OpenRouterLLM(model="openai/gpt-3.5-turbo")
+    llm = OpenRouterLLM(model="openai/gpt-4o-mini")
     response = llm.stream(
         model="mistralai/mistral-7b-instruct:free",
         messages=format_prompt("What is the capital of France?"),

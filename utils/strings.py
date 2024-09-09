@@ -63,5 +63,9 @@ def extract_json_text(text: str, is_object=True) -> str:
     )
 
 
-def format_with_dashes(input_string: str) -> str:
-    return input_string.lower().replace(" ", "-").replace("_", "-")
+def format_with_dashes(text: str) -> str:
+    return text.lower().replace(" ", "-").replace("_", "-")
+
+
+def abbreviate(text: str, max_length: int) -> str:
+    return text[:max_length] + "..." if len(text) > max_length else text
