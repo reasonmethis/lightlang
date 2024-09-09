@@ -17,7 +17,6 @@ class SequentialWorkflow:
         workflow_engine: WorkflowEngine,
         tasks: list[Task | PromptTemplate],
         handle_task_end: Callable | None = None,
-        init_task_id: int = 1,
         output_name_template: str = "task_{task_id}_output",  # For tasks w/o output_name
         output_dir: str | None = None,
     ):
