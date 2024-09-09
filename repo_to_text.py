@@ -32,7 +32,7 @@ def is_ignored(file_path: str) -> bool:
     return is_gitignored(file_path)
 
 
-def write_files_to_output(output_file):
+def export_repo(output_file):
     """Write the contents of all non-ignored files to the output file."""
     with open(output_file, encoding="utf-8", mode="w") as out_f:
         for root, dirs, files in os.walk("."):
@@ -63,7 +63,7 @@ def test_is_gitignored():
 
 if __name__ == "__main__":
     # Call the function to write files to output.txt
-    write_files_to_output("output.txt")
+    export_repo("output.txt")
 
     # Test the is_gitignored function
     # test_is_gitignored()
