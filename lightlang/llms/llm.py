@@ -62,12 +62,12 @@ class LLM:
     def invoke(self, messages: str | list[ChatMessage]) -> LLMResponse:
         """Invoke the model with the given messages."""
         # Construct the arguments for the provider's API
-        settings = self._get_settings(messages)
+        args = self._get_call_args(messages)
 
         # Different invocation logic for different providers
         if self._api_type == "openai":
             completion = self._provider_client.chat.completions.create(
-                **settings, stream=False
+                **args, stream=False
             )
             return LLMResponse(completion)
         else:
@@ -76,7 +76,7 @@ class LLM:
     def stream(self, messages: str | list[ChatMessage]):
         """Stream the model's response with the given messages."""
         # Construct the arguments for the provider's API
-        settings = self._get_settings(messages)
+        args = self._get_call_args(messages)
 
         # Initialize the stream state
         self.stream_status = "STARTED"
@@ -85,7 +85,7 @@ class LLM:
         # Different streaming logic for different providers
         if self._api_type == "openai":
             for chunk in self._provider_client.chat.completions.create(
-                **settings, stream=True
+                **args, stream=True
             ):
                 response_chunk = LLMResponseChunk(chunk)
                 self._update_stream_state(response_chunk)
@@ -103,7 +103,7 @@ class LLM:
                 "FIRST_CHUNK" if self.stream_status == "STARTED" else "IN_PROGRESS"
             )
 
-    def _get_settings(self, messages: str | list[ChatMessage]):
+    def _get_call_args(self, messages: str | list[ChatMessage]):
         # If messages is a string (single prompt), convert it to a list of ChatMessage
         if isinstance(messages, str):
             messages = [get_user_message(messages)]
@@ -113,3 +113,4 @@ class LLM:
             return self._model_config | {"messages": messages}
         else:
             raise NotImplementedError(f"Unsupported provider type: {self._api_type}")
+
