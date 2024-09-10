@@ -118,11 +118,18 @@ class LLM:
 
 
 if __name__ == "__main__":
-    # Example usage 
+    # Example usage
     # NOTE: Run this script as a module: python -m lightlang.llms.llm
-    # llm = LLM(provider="openrouter", model="openai/gpt-4o-mini") # Option 1
-    llm = LLM(provider="openai", model="gpt-4o-mini") # Option 2
-    response = llm.stream("What is the capital of France?")
-    for chunk in response:
-        if chunk.content:
-            print(chunk.content, end="")
+    llm = LLM(provider="openrouter", model="openai/gpt-4o-mini") # Option 1
+    # llm = LLM(provider="openai", model="gpt-4o-mini")  # Option 2
+
+    STREAM = False
+    if STREAM:
+        response = llm.stream("What is the capital of France?")
+        for chunk in response:
+            if chunk.content:
+                print(chunk.content, end="")
+    else:
+        response = llm.invoke("What is the capital of France?")
+        print(response.content)
+
