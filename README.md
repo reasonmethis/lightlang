@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/github/license/reasonmethis/lightlang)](LICENSE)
 
-An open-source mini-framework for using Large Language Models (LLMs) and building agentic workflows.
+A lightweight, ergonomic, close-to-the-metal framework for using Large Language Models (LLMs) and building agentic workflows.
 
 ## Table of Contents
 
@@ -42,7 +42,6 @@ LightLang provides a robust structure for integrating LLMs into workflows, enabl
 ### Prerequisites
 
 - Python 3.11+
-- pip (Python package installer)
 
 ### Installation
 
@@ -69,17 +68,7 @@ LightLang provides a robust structure for integrating LLMs into workflows, enabl
 ### Configuration
 
 1. **Environment Variables:**
-   - Create a `.env` file in the root directory and add the following variables:
-
-     ```
-     MODEL=<Your Default Model>
-     TEMPERATURE=<Default Temperature>
-     OPENROUTER_API_KEY=<Your OpenRouter API Key>
-     SERP_API_KEY=<Your SerpAPI Key>
-     ```
-
-2. **Custom Settings:**
-   - Adjust settings in the `config/` directory as needed, such as model configurations in `openrouter.py` or web scraping configurations in `trafilatura.cfg`.
+   - Copy the `.env.example` file to `.env` and set the required environment variables.
 
 ## Usage
 
