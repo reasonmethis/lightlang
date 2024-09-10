@@ -8,7 +8,8 @@ from lightlang.llms.config.model_config import (
 )
 from lightlang.llms.config.provider_config import DEFAULT_PROVIDER_CONFIGS
 from lightlang.llms.utils import get_user_message
-from lightlang.models import ChatCompletion, ChatMessage
+from lightlang.types.common import ChatMessage
+from lightlang.types.models import LLMResponse, LLMResponseChunk
 
 LLMProvider = Literal["openai", "openrouter"]
 
@@ -51,32 +52,64 @@ class LLM:
                 base_url=self._provider_config["base_url"],
                 api_key=self._provider_config["api_key"],
             )
-        # Initialize state
-        self.stream_status = "NOT_STREAMING"
 
-    def invoke(self, messages: str | list[ChatMessage]) -> ChatCompletion:
+        # Initialize state
+        self.stream_status: Literal[
+            "NOT_STREAMING", "STARTED", "FIRST_CHUNK", "IN_PROGRESS"
+        ] = "NOT_STREAMING"
+        self.stream_content: str = "" # Response so far or on last stream request
+
+    def invoke(self, messages: str | list[ChatMessage]) -> LLMResponse:
         """Invoke the model with the given messages."""
-        settings = self._get_settings(messages, stream=False)
-        if isinstance(self._provider_client, OpenAI):  # _api_type == "openai"
-            completion: ChatCompletion = self._provider_client.chat.completions.create(
-                **settings
+        # Construct the arguments for the provider's API
+        settings = self._get_settings(messages)
+
+        # Different invocation logic for different providers
+        if self._api_type == "openai":
+            completion = self._provider_client.chat.completions.create(
+                **settings, stream=False
             )
-            return completion
+            return LLMResponse(completion)
         else:
             raise Exception("LLM class: This should be unreachable.")
 
-    def invoke_txt(self, messages: str | list[ChatMessage]) -> str:
-        """Invoke the model with the given messages and return just the text."""
-        completion = self.invoke(messages)
-        return completion.choices[0].message.content
+    def stream(self, messages: str | list[ChatMessage]):
+        """Stream the model's response with the given messages."""
+        # Construct the arguments for the provider's API
+        settings = self._get_settings(messages)
 
-    def _get_settings(self, messages: str | list[ChatMessage], stream: bool):
+        # Initialize the stream state
+        self.stream_status = "STARTED"
+        self.stream_content = ""
+
+        # Different streaming logic for different providers
+        if self._api_type == "openai":
+            for chunk in self._provider_client.chat.completions.create(
+                **settings, stream=True
+            ):
+                response_chunk = LLMResponseChunk(chunk)
+                self._update_stream_state(response_chunk)
+                yield response_chunk
+        else:
+            raise Exception("LLM class: This should be unreachable.")
+
+        self.stream_status = "NOT_STREAMING"
+
+    def _update_stream_state(self, response_chunk: LLMResponseChunk):
+        if response_chunk.content is not None:
+            # Accumulate the response text so far and update the stream status
+            self.stream_content += response_chunk.content
+            self.stream_status = (
+                "FIRST_CHUNK" if self.stream_status == "STARTED" else "IN_PROGRESS"
+            )
+
+    def _get_settings(self, messages: str | list[ChatMessage]):
         # If messages is a string (single prompt), convert it to a list of ChatMessage
         if isinstance(messages, str):
             messages = [get_user_message(messages)]
 
         # Create the full settings depending on the provider type
         if self._api_type == "openai":
-            return self._model_config | {"messages": messages, "stream": stream}
+            return self._model_config | {"messages": messages}
         else:
             raise NotImplementedError(f"Unsupported provider type: {self._api_type}")

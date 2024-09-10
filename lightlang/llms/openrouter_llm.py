@@ -7,7 +7,7 @@ from openai import NOT_GIVEN, OpenAI
 
 from lightlang.llms.config.openrouter_config import OPENROUTER_MODEL_CONFIG
 from lightlang.llms.utils import get_user_message
-from lightlang.models import ChatMessage
+from lightlang.types import ChatMessage
 
 OPENROUTER_BASE = "https://openrouter.ai"
 OPENROUTER_API_BASE = f"{OPENROUTER_BASE}/api/v1"
@@ -105,10 +105,6 @@ class OpenRouterLLM:
         self.stream_status = "NOT_STREAMING"
 
 
-def format_prompt(prompt: str) -> list[ChatMessage]:
-    return [get_user_message(prompt)]
-
-
 def get_available_models():
     try:
         response = requests.get(f"{OPENROUTER_API_BASE}/models")
@@ -123,7 +119,7 @@ if __name__ == "__main__":
     llm = OpenRouterLLM(model="openai/gpt-4o-mini")
     response = llm.stream(
         model="mistralai/mistral-7b-instruct:free",
-        messages=format_prompt("What is the capital of France?"),
+        messages="What is the capital of France?",
     )
     for content in response:
         if content:
