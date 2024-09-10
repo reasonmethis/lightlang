@@ -6,13 +6,14 @@ from lightlang.llms.config.openrouter_config import OPENROUTER_MODEL_CONFIG
 def _construct_default_openrouter_model_config() -> dict[str, Any]:
     return {
         model: {
-            "extra_params": {
+            "extra_body": {
                 "provider": {
                     "order": list(model_config["providers"].keys())  # type: ignore
                 }
             }
         }
         for model, model_config in OPENROUTER_MODEL_CONFIG.items()
+        if "providers" in model_config
     }
 
 

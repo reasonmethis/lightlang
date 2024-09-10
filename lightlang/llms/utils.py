@@ -1,4 +1,4 @@
-from lightlang.models import ChatMessage
+from lightlang.types.common import ChatMessage
 
 
 def get_user_message(message: str) -> ChatMessage:

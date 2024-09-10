@@ -38,7 +38,7 @@ class LLM:
         # Merge the given model config with the default model config
         x = DEFAULT_MODEL_CONFIG_BY_PROVIDER.get(provider, {})
         y = DEFAULT_MODEL_CONFIG_BY_PROVIDER_AND_MODEL.get(provider, {}).get(model, {})
-        self._model_config = x | y | (model_config or {})
+        self._model_config = x | y | (model_config or {}) | {"model": model}
 
         # If temperature is provided explicitly, add it to the model config
         if temperature is not None:
@@ -52,12 +52,14 @@ class LLM:
                 base_url=self._provider_config["base_url"],
                 api_key=self._provider_config["api_key"],
             )
+        else:
+            raise NotImplementedError(f"Unsupported provider type: {self._api_type}")
 
         # Initialize state
         self.stream_status: Literal[
             "NOT_STREAMING", "STARTED", "FIRST_CHUNK", "IN_PROGRESS"
         ] = "NOT_STREAMING"
-        self.stream_content: str = "" # Response so far or on last stream request
+        self.stream_content: str = ""  # Response so far or on last stream request
 
     def invoke(self, messages: str | list[ChatMessage]) -> LLMResponse:
         """Invoke the model with the given messages."""
@@ -114,3 +116,13 @@ class LLM:
         else:
             raise NotImplementedError(f"Unsupported provider type: {self._api_type}")
 
+
+if __name__ == "__main__":
+    # Example usage 
+    # NOTE: Run this script as a module: python -m lightlang.llms.llm
+    # llm = LLM(provider="openrouter", model="openai/gpt-4o-mini") # Option 1
+    llm = LLM(provider="openai", model="gpt-4o-mini") # Option 2
+    response = llm.stream("What is the capital of France?")
+    for chunk in response:
+        if chunk.content:
+            print(chunk.content, end="")
