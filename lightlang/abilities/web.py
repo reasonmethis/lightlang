@@ -13,7 +13,7 @@ from firecrawl import FirecrawlApp  # type: ignore
 from pydantic import BaseModel, Field
 from serpapi import GoogleSearch  # type: ignore
 
-from config.web_config import default_header_template
+from .config.web_config import default_header_template
 from lightlang.utils.async_utils import make_sync
 from lightlang.utils.ingest import get_text_from_pdf
 from lightlang.utils.output import format_error

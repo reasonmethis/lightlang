@@ -5,7 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel
 
 from lightlang.llms.openrouter_llm import OpenRouterLLM
-from lightlang.models import ChatMessage
+from lightlang.types.common import ChatMessage
 from lightlang.tasks.task import GeneralTask
 
 logger = logging.getLogger(__name__)
