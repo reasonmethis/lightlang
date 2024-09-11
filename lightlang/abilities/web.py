@@ -1,4 +1,5 @@
 import asyncio
+import importlib.resources
 import io
 import logging
 import os
@@ -13,10 +14,11 @@ from firecrawl import FirecrawlApp  # type: ignore
 from pydantic import BaseModel, Field
 from serpapi import GoogleSearch  # type: ignore
 
-from .config.web_config import default_header_template
 from lightlang.utils.async_utils import make_sync
 from lightlang.utils.ingest import get_text_from_pdf
 from lightlang.utils.output import format_error
+
+from .config.web_config import default_header_template
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +161,9 @@ def get_content_from_urls_regular(
     batch_fetcher = get_batch_url_fetcher()
 
     while res.idx_first_not_tried < len(urls):
-        batch_urls = urls[res.idx_first_not_tried : res.idx_first_not_tried + batch_size]
+        batch_urls = urls[
+            res.idx_first_not_tried : res.idx_first_not_tried + batch_size
+        ]
 
         logger.info(f"Fetching batch of {len(batch_urls)} urls")
         batch_htmls = batch_fetcher([add_https_if_missing(url) for url in batch_urls])
@@ -260,15 +264,19 @@ def get_text_from_html(
         return html_content
 
     if mode == TextFromHtmlMode.TRAFILATURA:
-        # https://trafilatura.readthedocs.io/en/latest/usage-python.html
-        text = trafilatura.extract(
-            html_content,
-            include_links=True,
-            favor_recall=True,
-            config=None,
-            settingsfile="./config/trafilatura.cfg",
-            output_format=TRAFILATURA_OUTPUT_FORMAT,
-        )
+        # Ensure we get a valid local path to the config file even in a zipapp context
+        config_resource = importlib.resources.files(
+            "lightlang.abilities.config"
+        ).joinpath("trafilatura.cfg")
+        with importlib.resources.as_file(config_resource) as config_file:
+            text = trafilatura.extract(
+                html_content,
+                include_links=True,
+                favor_recall=True,
+                config=None,
+                settingsfile=str(config_file),
+                output_format=TRAFILATURA_OUTPUT_FORMAT,
+            )
         # NOTE: can try extracting with different settings till get the length we want
         clean = False  # trafilatura already does some cleaning
     else:
