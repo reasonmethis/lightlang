@@ -1,3 +1,6 @@
+# Custom
+repo-to-text-output.txt
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
