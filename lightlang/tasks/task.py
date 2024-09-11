@@ -1,5 +1,4 @@
-from collections.abc import Callable, Generator
-from typing import Any
+from typing import Any, Callable, Generator
 
 from lightlang.llms.openrouter_llm import OpenRouterLLM
 from lightlang.llms.utils import get_user_message

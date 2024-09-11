@@ -2,7 +2,7 @@ import copy
 import json
 import re
 
-from lightlang.models import ChatMessage
+from lightlang.types.common import ChatMessage
 from lightlang.prompts.prompt_template import PromptTemplate
 
 

@@ -1,6 +1,6 @@
 import logging
 import os
-from collections.abc import Callable
+from typing import Callable
 
 from lightlang.llms.openrouter_llm import OpenRouterLLM
 from lightlang.prompts.prompt_template import PromptTemplate
@@ -76,11 +76,14 @@ class SequentialWorkflow(BaseWorkflow):
             if task.output_handler is not None:  # First, run the task's output handler
                 task.output_handler(stream_res.task_result)
             if self.handle_task_end is not None:  # Then, the overall handler or...
-                self.handle_task_end(workflow=self, task_id=task_id, response=stream_res)
+                self.handle_task_end(
+                    workflow=self, task_id=task_id, response=stream_res
+                )
             else:  # ... or the default behavior
                 # Update the workflow engine's inputs with the parsed output
-                output_name = task.get_output_name() or self.output_name_template.format(
-                    task_id=self.task_id
+                output_name = (
+                    task.get_output_name()
+                    or self.output_name_template.format(task_id=self.task_id)
                 )
                 set_workflow_data_field(
                     self.workflow_data, output_name, stream_res.task_result
