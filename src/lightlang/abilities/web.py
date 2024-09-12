@@ -137,16 +137,19 @@ def get_content_from_urls_firecrawl(
     while res.idx_first_not_tried < len(urls):
         url = add_https_if_missing(raw_url := urls[res.idx_first_not_tried])
         scrape_result = app.scrape_url(url, params={"formats": ["markdown"]})
-        print(scrape_result)
 
         if markdown := scrape_result.get("markdown"):
             link_data = LinkData(text=markdown)
             res.num_ok_urls += 1
+            logger.info(f"Fetched URL: {raw_url}, {len(markdown)} characters")
         else:
-            link_data = LinkData(error=scrape_result.get("error", "UNKNOWN_ERROR"))
+            error = scrape_result.get(
+                "error", "Content was retrieved with no error but was empty."
+            )
+            link_data = LinkData(error=error)
+            logger.info(f"Error fetching URL: {raw_url}, error: {error}")
         res.link_data_dict[raw_url] = link_data
         res.idx_first_not_tried += 1
-        logger.info(f"Fetched and processed URL: {raw_url}")
 
     return res
 
