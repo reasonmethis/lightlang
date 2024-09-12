@@ -1,22 +1,31 @@
 import asyncio
+import importlib.resources
 import io
+import logging
 import os
+from collections.abc import Iterable
 from enum import Enum
 
 import aiohttp
-import trafilatura
+import trafilatura  # type: ignore
 from bs4 import BeautifulSoup
-from fake_useragent import UserAgent
+from fake_useragent import UserAgent  # type: ignore
+from firecrawl import FirecrawlApp  # type: ignore
 from pydantic import BaseModel, Field
-from serpapi import GoogleSearch
+from serpapi import GoogleSearch  # type: ignore
 
-from config.web_config import default_header_template
-from utils.async_utils import make_sync
-from utils.ingest import get_text_from_pdf
-from utils.log import get_logger
-from utils.output import format_error
+from lightlang.utils.async_utils import make_sync
+from lightlang.utils.ingest import get_text_from_pdf
+from lightlang.utils.output import format_error
 
-logger = get_logger()
+from .config.web_config import default_header_template
+
+logger = logging.getLogger(__name__)
+
+TRAFILATURA_OUTPUT_FORMAT = os.getenv("TRAFILATURA_OUTPUT_FORMAT", "txt")
+
+DEFAULT_URL_SCRAPE_METHOD = os.getenv("DEFAULT_URL_SCRAPE_METHOD", "REGULAR")
+FIRECRAWL_API_KEY = os.getenv("FIRECRAWL_API_KEY")
 
 
 class LinkData(BaseModel):
@@ -52,7 +61,7 @@ class URLRetrievalData(BaseModel):
 #       "snippet": "Coffee is a brewed drink prepared from roasted coffee beans, the seeds of berries from certain Coffea species. From the coffee fruit, the seeds are ...",
 
 
-DEFAULT_PARAMS = {
+SERP_API_DEFAULT_PARAMS = {
     "engine": "google",
     # "q": "groupm",
     # "location": "Austin, Texas, United States",
@@ -64,7 +73,7 @@ DEFAULT_PARAMS = {
 
 
 def search_with_serp_api(queries: list[str], params: dict | None = None):
-    params = DEFAULT_PARAMS | (params or {})
+    params = SERP_API_DEFAULT_PARAMS | (params or {})
     res: dict[str, list] = {}
     for query in queries:
         params["q"] = query
@@ -86,7 +95,65 @@ def search_with_serp_api(queries: list[str], params: dict | None = None):
 BATCH_SIZE = 10
 
 
-def get_content_from_urls(urls: list[str]) -> URLRetrievalData:
+def get_url_content_or_error(url: str) -> LinkData:
+    try:
+        content_data = get_content_from_urls([url])
+    except Exception as e:
+        return LinkData(error=str(e))
+
+    return content_data.link_data_dict[url]
+
+
+def add_https_if_missing(url: str) -> str:
+    if url.startswith("https:") or url.startswith("http:"):
+        return url
+    return "https://" + url
+
+
+def get_content_from_urls(
+    urls: list[str],
+    batch_size: int = BATCH_SIZE,
+    url_scrape_method: str = DEFAULT_URL_SCRAPE_METHOD,
+) -> URLRetrievalData:
+    match url_scrape_method:
+        case "FIRECRAWL":
+            return get_content_from_urls_firecrawl(urls, batch_size)
+        case "REGULAR":
+            return get_content_from_urls_regular(urls, batch_size)
+        case _:
+            raise ValueError(f"Invalid URL scrape method: {url_scrape_method}")
+
+
+def get_content_from_urls_firecrawl(
+    urls: list[str], batch_size: int = BATCH_SIZE
+) -> URLRetrievalData:
+    logger.info(
+        f"Will fetch {len(urls)} urls using Firecrawl (batch size {batch_size} ignored)"
+    )
+    res = URLRetrievalData(urls=urls)
+
+    app = FirecrawlApp(api_key=FIRECRAWL_API_KEY)
+
+    while res.idx_first_not_tried < len(urls):
+        url = add_https_if_missing(raw_url := urls[res.idx_first_not_tried])
+        scrape_result = app.scrape_url(url, params={"formats": ["markdown"]})
+        print(scrape_result)
+
+        if markdown := scrape_result.get("markdown"):
+            link_data = LinkData(text=markdown)
+            res.num_ok_urls += 1
+        else:
+            link_data = LinkData(error=scrape_result.get("error", "UNKNOWN_ERROR"))
+        res.link_data_dict[raw_url] = link_data
+        res.idx_first_not_tried += 1
+        logger.info(f"Fetched and processed URL: {raw_url}")
+
+    return res
+
+
+def get_content_from_urls_regular(
+    urls: list[str], batch_size: int = BATCH_SIZE
+) -> URLRetrievalData:
     logger.info(f"Will fetch {len(urls)} urls")
     res = URLRetrievalData(urls=urls)
 
@@ -95,11 +162,11 @@ def get_content_from_urls(urls: list[str]) -> URLRetrievalData:
 
     while res.idx_first_not_tried < len(urls):
         batch_urls = urls[
-            res.idx_first_not_tried : res.idx_first_not_tried + BATCH_SIZE
+            res.idx_first_not_tried : res.idx_first_not_tried + batch_size
         ]
 
         logger.info(f"Fetching batch of {len(batch_urls)} urls")
-        batch_htmls = batch_fetcher(batch_urls)
+        batch_htmls = batch_fetcher([add_https_if_missing(url) for url in batch_urls])
 
         # Process fetched content
         for url, html in zip(batch_urls, batch_htmls):
@@ -197,15 +264,19 @@ def get_text_from_html(
         return html_content
 
     if mode == TextFromHtmlMode.TRAFILATURA:
-        # https://trafilatura.readthedocs.io/en/latest/usage-python.html
-        text = trafilatura.extract(
-            html_content,
-            include_links=True,
-            favor_recall=True,
-            config=None,
-            settingsfile="./config/trafilatura.cfg",
-            output_format="txt",
-        )
+        # Ensure we get a valid local path to the config file even in a zipapp context
+        config_resource = importlib.resources.files(
+            "lightlang.abilities.config"
+        ).joinpath("trafilatura.cfg")
+        with importlib.resources.as_file(config_resource) as config_file:
+            text = trafilatura.extract(
+                html_content,
+                include_links=True,
+                favor_recall=True,
+                config=None,
+                settingsfile=str(config_file),
+                output_format=TRAFILATURA_OUTPUT_FORMAT,
+            )
         # NOTE: can try extracting with different settings till get the length we want
         clean = False  # trafilatura already does some cleaning
     else:
@@ -247,13 +318,13 @@ def clean_text(text: str, break_multi_headlines=False):
         # Break multi-headlines (2+ spaces) into a line each
         lines = (phrase.strip() for line in lines for phrase in line.split("  "))
 
-    lines = remove_consecutive_blank_lines(lines)
+    lines = remove_consecutive_blank_lines(lines)  # type: ignore
     text = "\n".join(lines)
     return text
 
 
 def remove_consecutive_blank_lines(
-    lines: list[str], max_consecutive_blank_lines=1
+    lines: Iterable[str], max_consecutive_blank_lines=1
 ) -> list[str]:
     """Remove consecutive blank lines from a list of lines."""
     new_lines = []

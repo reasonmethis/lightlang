@@ -1,4 +1,4 @@
-MODELS = {
+OPENROUTER_MODEL_CONFIG = {
     "meta-llama/llama-3-70b-instruct": {
         "context": 8192,
         "providers": {
@@ -47,10 +47,17 @@ MODELS = {
             "OpenAI": {"input": 10, "output": 30, "latency": 1.34},
         },
     },
-    "openai/gpt-4o": {
+    "openai/gpt-4o-2024-08-06": {
         "context": 128000,
         "providers": {
-            "OpenAI": {"input": 5, "output": 15, "max_output": 4096, "latency": 0.74},
+            "OpenAI": {
+                "input": 2.5,
+                "output": 10,
+                "input_img": 7.225,
+                "max_output": 16384,
+                "latency": 0.55,
+                "tps": 81,
+            },
         },
     },
     "openai/gpt-4o-mini": {
@@ -90,7 +97,7 @@ MODELS = {
 
 DEFAULT_FREE_MODEL = "meta-llama/llama-3-8b-instruct:free"
 DEFAULT_CHEAP_MODEL = "openai/gpt-4o-mini"
-DEFAULT_SMART_MODEL = "openai/gpt-4o"
+DEFAULT_SMART_MODEL = "openai/gpt-4o-2024-08-06"
 
 MODEL_ALIASES = {
     "DEFAULT_FREE_MODEL": DEFAULT_FREE_MODEL,

@@ -1,0 +1,77 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lightlang"
+dynamic = ["version"]
+description = 'A lightweight ergonomic framework for LLM workflows'
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+keywords = []
+authors = [
+  { name = "Dmitriy Vasilyuk", email = "111213624+reasonmethis@users.noreply.github.com" },
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
+]
+dependencies = [
+    "aiohttp~=3.10",
+    "beautifulsoup4~=4.12",
+    "certifi>=2024.7.4",
+    "fake-useragent~=1.5",
+    "firecrawl-py~=1.2.3",
+    "google_search_results~=2.4.2",
+    "openai~=1.38",
+    "pydantic~=2.8",
+    "pypdf~=4.3.1",
+    "python-dotenv~=1.0.1",
+    "trafilatura~=1.12.0"
+]
+
+
+[project.urls]
+Documentation = "https://github.com/reasonmethis/lightlang#readme"
+Issues = "https://github.com/reasonmethis/lightlang/issues"
+Source = "https://github.com/reasonmethis/lightlang"
+
+[tool.hatch.version]
+path = "src/lightlang/__about__.py"
+
+[tool.hatch.envs.types]
+extra-dependencies = [
+  "mypy>=1.0.0",
+]
+[tool.hatch.envs.types.scripts]
+check = "mypy --install-types --non-interactive {args:src/lightlang tests}"
+
+[tool.coverage.run]
+source_pkgs = ["lightlang", "tests"]
+branch = true
+parallel = true
+omit = [
+  "src/lightlang/__about__.py",
+]
+
+[tool.coverage.paths]
+lightlang = ["src/lightlang", "*/lightlang/src/lightlang"]
+tests = ["tests", "*/lightlang/tests"]
+
+[tool.coverage.report]
+exclude_lines = [
+  "no cov",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+  "/.github",
+  "/docs",
+]
