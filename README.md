@@ -1,13 +1,16 @@
 # LightLang: A Lightweight Framework for LLM Workflows
 
-[![License](https://img.shields.io/github/license/reasonmethis/lightlang)](LICENSE)
+[![PyPI version](https://img.shields.io/pypi/v/lightlang.svg)](https://pypi.python.org/pypi/lightlang)
+[![License](https://img.shields.io/github/license/reasonmethis/lightlang)](LICENSE)[![Python versions](https://img.shields.io/pypi/pyversions/lightlang.svg)](https://pypi.python.org/pypi/lightlang)
+
 
 A lightweight, ergonomic, close-to-the-metal framework for using Large Language Models (LLMs) and building agentic workflows.
 
 ## Table of Contents
 
 - [Introduction](#introduction)
-- [Features](#features)
+    - [Features](#features)
+    - [Why LightLang](#why-lightlang)
 - [Getting Started](#getting-started)
     - [Prerequisites](#prerequisites)
     - [Installation](#installation)
@@ -30,47 +33,51 @@ A lightweight, ergonomic, close-to-the-metal framework for using Large Language 
 
 ## Introduction
 
-LightLang provides a robust structure for integrating LLMs into workflows, enabling complex task automation, information retrieval, and data processing. It is designed for developers and researchers who want to leverage LLMs for diverse applications.
+LightLang is a lightweight, ergonomic framework designed to help developers quickly build and manage workflows powered by Large Language Models (LLMs). Whether you're working with OpenAI's GPT models, Anthropic's Claude, or other models available via OpenRouter, LightLang provides a simple and direct way to integrate these models into your applications. 
 
-## Features
+### Why LightLang
 
-- **Agentic Workflows**: Create and manage sequential and complex workflows with LLMs.
-- **Google Search**: Perform and utilize Google searches within workflows.
-- **Web Scraping**: Extract and process data from web pages and documents.
-- **Streaming Support**: Stream LLM responses and task outputs for real-time processing.
+**LightLang** is designed for developers who want simplicity and flexibility without sacrificing power. It stands apart from other frameworks like LangChain and LlamaIndex by focusing on:
+
+- **Lightweight Design**: LightLang is lean, with fewer dependencies, making it faster to install and easier to integrate into existing projects.
+- **Fine Control**: While other frameworks introduce high-level abstractions that can obscure LLM interactions, LightLang gives developers direct access to model configurations and workflows.
+- **Extensibility**: LightLang goes beyond just LLM interactions, offering built-in tools for web scraping, Google searches, and PDF ingestion. This makes it a one-stop solution for building data-driven LLM applications.
+- **Ergonomic API**: Designed with developers in mind, LightLang provides an intuitive interface that minimizes boilerplate and focuses on the essentials, allowing for rapid prototyping and development.
+
+### Features
+
+- **Multi-Provider Support**: Seamless integration with popular LLM providers like OpenAI and OpenRouter, enabling access to models such as GPT-4, Claude, and many others.
+- **Dynamic Prompting**: Create reusable, dynamic prompts with `PromptTemplate` and `ChatPromptTemplate`, allowing you to easily format and adjust prompts on the fly.
+- **Multi-Turn Conversations**: Manage context and multi-turn conversations with LLMs, making it easier to build interactive agents and assistants.
+- **Extended Capabilities**: Perform web scraping, Google searches, and PDF ingestion to enhance LLM workflows with external data.
+- **Close-to-the-Metal Design**: LightLang offers a simple interface, giving developers full control over LLM parameters (like temperature and max tokens), streaming, and system messages without unnecessary abstractions.
+- **Agentic Workflow Support**: Build complex agent-based workflows that maintain state and context across multiple interactions.
 
 ## Getting Started
 
 ### Prerequisites
 
 - Python 3.11+
+- An API key for a provider like OpenAI or OpenRouter
 
 ### Installation
 
-1. **Clone the repository:**
+You can install LightLang from PyPI using `pip`:
 
-   ```sh
-   git clone https://github.com/reasonmethis/lightlang.git
-   cd lightlang
-   ```
-
-2. **Create a virtual environment (optional but recommended):**
-
-   ```sh
-   python -m venv venv
-   source venv/bin/activate   # On Windows: venv\Scripts\activate
-   ```
-
-3. **Install dependencies:**
-
-   ```sh
-   pip install -r requirements.txt
-   ```
+```bash
+pip install lightlang
+```
 
 ### Configuration
 
-1. **Environment Variables:**
-   - Copy the `.env.example` file to `.env` and set the required environment variables.
+LightLang uses environment variables to configure access to various LLM providers and external services:
+
+- **`OPENAI_API_KEY`**: Set this to your OpenAI API key if you want to use models from OpenAI (e.g., GPT-4o).
+- **`OPENROUTER_API_KEY`**: Set this to your OpenRouter API key if you want to access multiple LLMs available via the OpenRouter API (e.g., Claude, LLaMA).
+- **`SERPAPI_API_KEY`**: Set this if you'd like to perform Google searches via the SerpAPI service.
+- **`FIRECRAWL_API_KEY`**: Required for scraping web pages the Firecrawl API (note: there is an alternative method for web scraping without an API key).
+
+To configure these environment variables, you can set them directly in your shell or add them to a `.env` file in your project.
 
 ## Usage
 
@@ -214,7 +221,7 @@ messages = chat_prompt.format(specialty="password resets", issue="resetting my p
 
 ### Performing Google Searches, Web Scraping, and PDF Ingestion
 
-This section walks through examples of how to use LightLang’s capabilities for performing Google searches, web scraping (both regular and Firecrawl methods), and ingesting content from PDFs.
+This section walks through examples of how to use LightLang's capabilities for performing Google searches, web scraping (both regular and Firecrawl methods), and ingesting content from PDFs.
 
 #### Performing Google Searches
 
