@@ -236,7 +236,7 @@ PDF_TEXT_PREFIX = "PLAIN_TEXT[PDF]: "
 
 
 async def afetch_url_aiohttp(
-    session: aiohttp.ClientSession, url: str, retries=3, backoff_factor=0.5
+    session: "aiohttp.ClientSession", url: str, retries=3, backoff_factor=0.5
 ) -> str:
     """
     Asynchronously fetch a URL using an aiohttp session with retry and exponential backoff.
