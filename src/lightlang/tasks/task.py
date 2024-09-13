@@ -1,6 +1,6 @@
 from typing import Any, Callable, Generator
 
-from lightlang.llms.openrouter_llm import OpenRouterLLM
+from lightlang.llms.llm import LLM
 from lightlang.llms.utils import get_user_message
 from lightlang.prompts.chat_prompt_template import ChatPromptTemplate
 from lightlang.prompts.prompt_template import PromptTemplate
@@ -32,7 +32,7 @@ class LLMTask:  # TODO: Move running the task to this class
         prompt_template: ChatPromptTemplate | PromptTemplate | str,
         *,
         task_id: int | str | None = None,
-        llm: OpenRouterLLM | None = None,
+        llm: LLM | None = None,
         output_parser: Callable | None = None,
         output_handler: Callable | None = None,
     ):

@@ -1,12 +1,13 @@
 import logging
 from collections.abc import Callable
-from typing import Any, Literal
+from typing import Any, Generator, Literal
 
 from pydantic import BaseModel
 
-from lightlang.llms.openrouter_llm import OpenRouterLLM
+from lightlang.llms.llm import LLM
 from lightlang.types.common import ChatMessage
 from lightlang.tasks.task import GeneralTask
+from lightlang.types.models import LLMResponseChunk
 
 logger = logging.getLogger(__name__)
 
@@ -53,10 +54,10 @@ def stream_general_task(task: GeneralTask, task_id: int | str | None = None):
 def stream_llm_call_with_retries(
     messages: list[ChatMessage],
     task_id: int | str,
-    llm: OpenRouterLLM,
+    llm: LLM,
     parser: Callable | None = None,  # Parser for the output (e.g. JSON extractor)
     max_tries: int = DEFAULT_MAX_LLM_CALL_TRIES,
-):
+) -> Generator[TaskEvent | LLMResponseChunk, None, StreamResult]: # TODO: Clean up
     # Call the LLM and yield as well as collect the streaming output
     for attempt in range(1, max_tries + 1):
         log_msg = f"Calling LLM for Task {task_id}"
@@ -73,9 +74,10 @@ def stream_llm_call_with_retries(
         # Call the LLM and retry if there is an error
         llm_output = ""
         try:
-            for content in llm.stream(messages=messages):
-                llm_output += content
-                yield content
+            for chunk in llm.stream(messages=messages):
+                if chunk.content is not None:
+                    llm_output += chunk.content
+                yield chunk
         except Exception as e:
             logger.warning(f"Error calling LLM: {(last_error:=e)}")
             continue  # Retry the call if there are more attempts left

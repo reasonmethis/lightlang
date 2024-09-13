@@ -2,7 +2,8 @@ import logging
 import os
 from typing import Callable
 
-from lightlang.llms.openrouter_llm import OpenRouterLLM
+from lightlang.llms.llm import LLM
+from lightlang.prompts.chat_prompt_template import ChatPromptTemplate
 from lightlang.prompts.prompt_template import PromptTemplate
 from lightlang.tasks.task import GeneralTask, LLMTask
 from lightlang.tasks.task_streaming import (
@@ -14,7 +15,7 @@ from lightlang.workflows.workflow_base import BaseWorkflow
 from lightlang.workflows.workflow_data import WorkflowData, set_workflow_data_field
 
 logger = logging.getLogger(__name__)
-TaskCompatible = str | PromptTemplate | LLMTask | GeneralTask
+TaskCompatible = str | PromptTemplate | ChatPromptTemplate | LLMTask | GeneralTask
 
 
 class SequentialWorkflow(BaseWorkflow):
@@ -23,7 +24,7 @@ class SequentialWorkflow(BaseWorkflow):
     def __init__(
         self,
         workflow_data: WorkflowData,
-        default_llm: OpenRouterLLM,
+        default_llm: LLM,
         tasks: list[TaskCompatible],
         handle_task_end: Callable | None = None,
         output_name_template: str = "task_{task_id}_output",  # For tasks w/o output_name
@@ -32,9 +33,13 @@ class SequentialWorkflow(BaseWorkflow):
         self.workflow_data = workflow_data
         self.default_llm = default_llm
 
-        # Convert PromptTemplate instances and strings to LLMTask instances
+        # Convert prompt templates or strings to LLMTask instances
         self.tasks = [
-            LLMTask(t) if isinstance(t, PromptTemplate) or isinstance(t, str) else t
+            LLMTask(t)
+            if isinstance(t, str)
+            or isinstance(t, PromptTemplate)
+            or isinstance(t, ChatPromptTemplate)
+            else t
             for t in tasks
         ]
         self.task_by_id = {

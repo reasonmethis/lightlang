@@ -70,8 +70,8 @@ def test_is_gitignored():
 
 
 if __name__ == "__main__":
-    # Call the function to write files to output.txt
-    export_repo("output.txt")
+    # Call the function to write files to the output file
+    export_repo(OUTPUT_FILE)
 
     # Test the is_gitignored function
     # test_is_gitignored()
