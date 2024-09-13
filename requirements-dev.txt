@@ -1,0 +1,5 @@
+pandas-stubs
+python-dotenv~=1.0.1
+types-beautifulsoup4
+types-requests
+mypy~=1.11

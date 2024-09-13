@@ -1,19 +1,20 @@
-from pypdf import PdfReader
+from typing import TYPE_CHECKING
 
-allowed_extensions = [
-    "",
-    ".txt",
-    ".md",
-    ".rtf",
-    ".log",
-    ".pdf",
-    ".docx",
-    ".html",
-    ".htm",
-]
+from lightlang.utils.import_utils import get_missing_dep_message
+
+# Optional dependencies (some may not be needed here for type checking but let's put
+# them all here for completeness)
+if TYPE_CHECKING:
+    import docx2txt  # type: ignore # noqa: F401
+    from pypdf import PdfReader  # noqa: F401
 
 
 def get_page_texts_from_pdf(file):
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        raise ImportError(get_missing_dep_message("pypdf", "ingest"))
+
     reader = PdfReader(file)
     return [page.extract_text() for page in reader.pages]
 
@@ -31,48 +32,10 @@ def get_text_from_pdf(file, page_start=DEFAULT_PAGE_START, page_sep=DEFAULT_PAGE
     )
 
 
-# def extract_text(files, allow_all_ext):
-#     docs = []
-#     failed_files = []
-#     unsupported_ext_files = []
-#     for file in files:
-#         if isinstance(file, UploadFile):
-#             file_name = file.filename or "unnamed-file"  # need?
-#             file = file.file
-#         else:
-#             file_name = file.name
-#         try:
-#             extension = os.path.splitext(file_name)[1]
-#             if not allow_all_ext and extension not in allowed_extensions:
-#                 unsupported_ext_files.append(file_name)
-#                 continue
-#             if extension == ".pdf":
-#                 for i, text in enumerate(get_page_texts_from_pdf(file)):
-#                     metadata = {"source": f"{file_name} (page {i + 1})"}
-#                     docs.append(Document(page_content=text, metadata=metadata))
-#             else:
-#                 if extension == ".docx":
-#                     text = docx2txt.process(file)
-#                 elif extension in [".html", ".htm"]:
-#                     soup = BeautifulSoup(file, "html.parser")
-#                     # Remove script and style elements
-#                     for script_or_style in soup(["script", "style"]):
-#                         script_or_style.extract()
-#                     text = soup.get_text()
-#                     # Replace multiple newlines with single newlines
-#                     text = re.sub(r"\n{2,}", "\n\n", text)
-#                     print(text)
-#                 else:
-#                     # Treat as text file
-#                     if isinstance(file, UploadedFile):
-#                         text = file.getvalue().decode("utf-8")
-#                         # NOTE: not sure what the advantage is for Streamlit's UploadedFile
-#                     else:
-#                         text = file.read().decode("utf-8")
-#                 docs.append(Document(page_content=text, metadata={"source": file_name}))
-#         except Exception as e:
-#             ic(e)
-#             failed_files.append(file_name)
+def get_text_from_docx(file):
+    try:
+        from docx2txt import process
+    except ImportError:
+        raise ImportError(get_missing_dep_message("docx2txt", "ingest"))
 
-#     ic(len(docs), failed_files, unsupported_ext_files)
-#     return docs, failed_files, unsupported_ext_files
+    return process(file)

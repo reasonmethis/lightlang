@@ -3,8 +3,9 @@ import os
 from pprint import pprint
 from typing import Literal, overload
 
-DELIMITER = "-" * 80 + "\n\n"
-DELIMITER_1_NEWLINE = "-" * 80 + "\n"
+DELIMITER80 = "-" * 80
+DELIMITER80_NL = DELIMITER80 + "\n"
+DELIMITER80_NLNL = DELIMITER80 + "\n\n"
 
 
 @overload

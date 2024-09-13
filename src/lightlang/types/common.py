@@ -9,4 +9,3 @@ from openai.types.chat.chat_completion_chunk import ChatCompletionChunk as _Chat
 ChatMessage = ChatCompletionMessageParam 
 ChatCompletion = _ChatCompletion
 ChatCompletionChunk = _ChatCompletionChunk
-

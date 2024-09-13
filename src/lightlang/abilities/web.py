@@ -5,14 +5,21 @@ import logging
 import os
 from collections.abc import Iterable
 from enum import Enum
+from typing import TYPE_CHECKING
 
-import aiohttp
-import trafilatura  # type: ignore
-from bs4 import BeautifulSoup
-from fake_useragent import UserAgent  # type: ignore
-from firecrawl import FirecrawlApp  # type: ignore
 from pydantic import BaseModel, Field
-from serpapi import GoogleSearch  # type: ignore
+
+from lightlang.utils.import_utils import get_missing_dep_message
+
+# Optional dependencies (some are not needed here for type checking but let's put
+# them all here for completeness)
+if TYPE_CHECKING:
+    import aiohttp
+    import trafilatura  # type: ignore # noqa: F401
+    from bs4 import BeautifulSoup  # noqa: F401
+    from fake_useragent import UserAgent  # type: ignore # noqa: F401
+    from firecrawl import FirecrawlApp  # type: ignore # noqa: F401
+    from serpapi import GoogleSearch  # type: ignore # noqa: F401
 
 from lightlang.utils.async_utils import make_sync
 from lightlang.utils.ingest import get_text_from_pdf
@@ -73,6 +80,12 @@ SERP_API_DEFAULT_PARAMS = {
 
 
 def search_with_serp_api(queries: list[str], params: dict | None = None):
+    """Perform a Google search using the SerpApi library."""
+    try:
+        from serpapi import GoogleSearch
+    except ImportError:
+        raise ImportError(get_missing_dep_message("serpapi", "web"))
+    
     params = SERP_API_DEFAULT_PARAMS | (params or {})
     res: dict[str, list] = {}
     for query in queries:
@@ -130,6 +143,11 @@ def get_content_from_urls_firecrawl(
     logger.info(
         f"Will fetch {len(urls)} urls using Firecrawl (batch size {batch_size} ignored)"
     )
+    try:
+        from firecrawl import FirecrawlApp
+    except ImportError:
+        raise ImportError(get_missing_dep_message("firecrawl", "web"))
+
     res = URLRetrievalData(urls=urls)
 
     app = FirecrawlApp(api_key=FIRECRAWL_API_KEY)
@@ -195,12 +213,17 @@ def get_batch_url_fetcher():
 AIOHTTP_TIMEOUT_MS = 10000
 
 
-async def afetch_urls_in_parallel_aiohttp(urls):
+async def afetch_urls_in_parallel_aiohttp(urls: list[str]) -> list[str]:
     """
     Asynchronously fetch multiple URLs in parallel using aiohttp.
     Return the HTML content of each URL. If there is an error in a particular URL,
     return the error message instead of that URL's content, starting with "Error: ".
     """
+    try:
+        import aiohttp
+    except ImportError:
+        raise ImportError(get_missing_dep_message("aiohttp", "web"))
+
     timeout = aiohttp.ClientTimeout(total=AIOHTTP_TIMEOUT_MS / 1000)
     async with aiohttp.ClientSession(timeout=timeout) as session:
         tasks = [afetch_url_aiohttp(session, url) for url in urls]
@@ -214,11 +237,16 @@ PDF_TEXT_PREFIX = "PLAIN_TEXT[PDF]: "
 
 async def afetch_url_aiohttp(
     session: aiohttp.ClientSession, url: str, retries=3, backoff_factor=0.5
-):
+) -> str:
     """
     Asynchronously fetch a URL using an aiohttp session with retry and exponential backoff.
     It extracts text from PDFs and returns HTML content otherwise.
     """
+    try:
+        from fake_useragent import UserAgent
+    except ImportError:
+        raise ImportError(get_missing_dep_message("fake_useragent", "web"))
+
     header_template = default_header_template
     header_template["User-Agent"] = UserAgent().random
 
@@ -247,6 +275,7 @@ async def afetch_url_aiohttp(
             # Wait for a bit before retrying
             sleep_time = backoff_factor * (2**attempt)  # Exponential backoff
             await asyncio.sleep(sleep_time)
+    raise Exception("Should not reach here")
 
 
 class TextFromHtmlMode(Enum):
@@ -267,6 +296,11 @@ def get_text_from_html(
         return html_content
 
     if mode == TextFromHtmlMode.TRAFILATURA:
+        try:
+            import trafilatura
+        except ImportError:
+            raise ImportError(get_missing_dep_message("trafilatura", "web"))
+
         # Ensure we get a valid local path to the config file even in a zipapp context
         config_resource = importlib.resources.files(
             "lightlang.abilities.config"
@@ -283,6 +317,11 @@ def get_text_from_html(
         # NOTE: can try extracting with different settings till get the length we want
         clean = False  # trafilatura already does some cleaning
     else:
+        try:
+            from bs4 import BeautifulSoup
+        except ImportError:
+            raise ImportError(get_missing_dep_message("beautifulsoup4", "web"))
+
         soup = BeautifulSoup(html_content, "html.parser")
         # Remove script and style elements
         for script_or_style in soup(["script", "style"]):
