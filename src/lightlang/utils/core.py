@@ -6,6 +6,7 @@ from typing import Literal, overload
 DELIMITER80 = "-" * 80
 DELIMITER80_NL = DELIMITER80 + "\n"
 DELIMITER80_NLNL = DELIMITER80 + "\n\n"
+DELIMITER80_EQ = "=" * 80
 
 
 @overload

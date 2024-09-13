@@ -69,3 +69,23 @@ def format_with_dashes(text: str) -> str:
 
 def abbreviate(text: str, max_length: int) -> str:
     return text[:max_length] + "..." if len(text) > max_length else text
+
+def overwrite_middle(s1: str, s2: str) -> str:
+    """Overwrites the middle part of s1 with s2.
+
+    Args:
+        s1 (str): The original string to be modified.
+        s2 (str): The string to overwrite the middle of s1.
+
+    Returns:
+        str: A new string with the middle of s1 overwritten by s2.
+    """
+    l1 = len(s1)
+    l2 = len(s2)
+
+    # Calculate start index for overwriting
+    start_idx = (l1 - l2) // 2
+    if start_idx < 0:
+        start_idx = 0
+
+    return s1[:start_idx] + s2 + s1[start_idx + l2 :]
