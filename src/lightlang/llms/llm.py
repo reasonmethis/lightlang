@@ -17,28 +17,39 @@ LLMProvider = Literal["openai", "openrouter"]
 class LLM:
     """LLM from any provider, offering a common interface."""
 
+    _default_provider: LLMProvider | None = None
+
     def __init__(
         self,
-        provider: LLMProvider,
         model: str,
         *,
+        provider: LLMProvider | None = None,
         temperature: float | None = None,
         model_config: dict | None = None,
         provider_config: dict | None = None,
         provider_client: Any | None = None,
     ):
-        self._provider = provider
+        self._provider = provider or self._default_provider
         self._model = model
 
+        # If no provider is specified or set as default, raise an error
+        if self._provider is None:
+            raise ValueError("No LLM provider specified and no default provider set.")
+
         # Merge the given provider config with the default provider config
-        default_provider_config = DEFAULT_PROVIDER_CONFIGS.get(provider, {})
+        default_provider_config = DEFAULT_PROVIDER_CONFIGS.get(self._provider, {})
         self._provider_config = default_provider_config | (provider_config or {})
         self._api_type = self._provider_config.get("api_type")
 
         # Merge the given model config with the default model config
-        x = DEFAULT_MODEL_CONFIG_BY_PROVIDER.get(provider, {})
-        y = DEFAULT_MODEL_CONFIG_BY_PROVIDER_AND_MODEL.get(provider, {}).get(model, {})
-        self._model_config = x | y | (model_config or {}) | {"model": model}
+        self._model_config = (
+            DEFAULT_MODEL_CONFIG_BY_PROVIDER.get(self._provider, {})
+            | DEFAULT_MODEL_CONFIG_BY_PROVIDER_AND_MODEL.get(self._provider, {}).get(
+                model, {}
+            )
+            | (model_config or {})
+            | {"model": model}
+        )
 
         # If temperature is provided explicitly, add it to the model config
         if temperature is not None:
@@ -97,6 +108,11 @@ class LLM:
 
         self.stream_status = "NOT_STREAMING"
 
+    @classmethod
+    def set_default_provider(cls, provider: LLMProvider):
+        """Set the default provider for all LLM instances."""
+        cls._default_provider = provider
+
     def _update_stream_state(self, response_chunk: LLMResponseChunk):
         if response_chunk.content is not None:
             # Accumulate the response text so far and update the stream status
@@ -120,7 +136,7 @@ class LLM:
 if __name__ == "__main__":
     # Example usage
     # NOTE: Run this script as a module: python -m lightlang.llms.llm
-    llm = LLM(provider="openrouter", model="openai/gpt-4o-mini") # Option 1
+    llm = LLM(provider="openrouter", model="openai/gpt-4o-mini")  # Option 1
     # llm = LLM(provider="openai", model="gpt-4o-mini")  # Option 2
 
     STREAM = False
@@ -132,4 +148,3 @@ if __name__ == "__main__":
     else:
         response = llm.invoke("What is the capital of France?")
         print(response.content)
-
