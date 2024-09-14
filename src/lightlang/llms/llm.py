@@ -1,3 +1,4 @@
+import os
 from typing import Any, Literal
 
 from openai import OpenAI
@@ -24,6 +25,7 @@ class LLM:
         model: str,
         *,
         provider: LLMProvider | None = None,
+        api_key: str | None = None,
         temperature: float | None = None,
         model_config: dict | None = None,
         provider_config: dict | None = None,
@@ -61,7 +63,7 @@ class LLM:
         elif self._api_type == "openai":
             self._provider_client = OpenAI(
                 base_url=self._provider_config["base_url"],
-                api_key=self._provider_config["api_key"],
+                api_key=api_key or os.getenv(self._provider_config["api_key_env_var"]),
             )
         else:
             raise NotImplementedError(f"Unsupported provider type: {self._api_type}")

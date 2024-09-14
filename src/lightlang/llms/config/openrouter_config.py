@@ -1,4 +1,7 @@
-OPENROUTER_MODEL_CONFIG = {
+from typing import Any
+
+
+OPENROUTER_MODEL_CONFIG: dict[str, dict[str, Any]] = {
     "meta-llama/llama-3-70b-instruct": {
         "context": 8192,
         "providers": {
