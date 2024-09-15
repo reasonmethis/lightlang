@@ -9,10 +9,9 @@ from lightlang.llms.config.model_config import (
 )
 from lightlang.llms.config.provider_config import DEFAULT_PROVIDER_CONFIGS
 from lightlang.llms.utils import get_user_message
-from lightlang.types.common import ChatMessage
+from lightlang.types.common import ChatMessage, LLMProvider
 from lightlang.types.models import LLMResponse, LLMResponseChunk
-
-LLMProvider = Literal["openai", "openrouter"]
+from lightlang.types.utils import is_allowed_llm_provider
 
 
 class LLM:
@@ -24,7 +23,7 @@ class LLM:
         self,
         model: str,
         *,
-        provider: LLMProvider | None = None,
+        provider: LLMProvider | str | None = None, # str is so users don't need to cast
         api_key: str | None = None,
         temperature: float | None = None,
         model_config: dict | None = None,
@@ -37,6 +36,10 @@ class LLM:
         # If no provider is specified or set as default, raise an error
         if self._provider is None:
             raise ValueError("No LLM provider specified and no default provider set.")
+        
+        # Type guard the provider
+        if not is_allowed_llm_provider(self._provider):
+            raise ValueError(f"Unsupported LLM provider: {self._provider}")
 
         # Merge the given provider config with the default provider config
         default_provider_config = DEFAULT_PROVIDER_CONFIGS.get(self._provider, {})
@@ -74,6 +77,14 @@ class LLM:
         ] = "NOT_STREAMING"
         self.stream_content: str = ""  # Response so far or on last stream request
 
+    @property
+    def provider(self) -> LLMProvider:
+        return self._provider # type: ignore # mypy bug (was type-guarded)
+    
+    @property
+    def model(self) -> str:
+        return self._model
+    
     def invoke(self, messages: str | list[ChatMessage]) -> LLMResponse:
         """Invoke the model with the given messages."""
         # Construct the arguments for the provider's API

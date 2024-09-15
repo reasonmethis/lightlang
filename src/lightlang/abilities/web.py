@@ -7,9 +7,8 @@ from collections.abc import Iterable
 from enum import Enum
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, Field
-
 from lightlang.utils.import_utils import get_missing_dep_message
+from pydantic import BaseModel, Field
 
 # Optional dependencies (some are not needed here for type checking but let's put
 # them all here for completeness)
@@ -85,19 +84,23 @@ def search_with_serp_api(queries: list[str], params: dict | None = None):
         from serpapi import GoogleSearch
     except ImportError:
         raise ImportError(get_missing_dep_message("serpapi", "web"))
-    
+
     params = SERP_API_DEFAULT_PARAMS | (params or {})
     res: dict[str, list] = {}
     for query in queries:
         params["q"] = query
-        logger.debug(f"Searching for: {query}")
+        logger.debug(f"Searching with SerpAPI for: {query}")
         search = GoogleSearch(params)
         results = search.get_dict().get("organic_results")
         if results:
-            for result in results[:3]:
-                logger.info(f"Title: {result.get('title')}")
-                logger.info(f"Link: {result.get('link')}")
-                logger.info(f"Snippet: {result.get('snippet')}")
+            # Log two search results per query (title, link, snippet)
+            log_message = "First two search results:\n"
+            for result in results[:2]:
+                log_message += "-" * 80 + "\n"
+                log_message += f"Title: {result.get('title')}\n"
+                log_message += f"Link: {result.get('link')}\n"
+                log_message += f"Snippet: {result.get('snippet')}\n"
+            logger.info(log_message)
         else:
             logger.warning(f"No results found for: {query}")
 
@@ -105,7 +108,21 @@ def search_with_serp_api(queries: list[str], params: dict | None = None):
     return res
 
 
-BATCH_SIZE = 10
+DEFAULT_URL_SCRAPE_BATCH_SIZE = 10
+
+
+def get_content_from_urls(
+    urls: list[str],
+    batch_size: int = DEFAULT_URL_SCRAPE_BATCH_SIZE,
+    url_scrape_method: str = DEFAULT_URL_SCRAPE_METHOD,
+) -> URLRetrievalData:
+    match url_scrape_method:
+        case "FIRECRAWL":
+            return get_content_from_urls_firecrawl(urls, batch_size)
+        case "REGULAR":
+            return get_content_from_urls_regular(urls, batch_size)
+        case _:
+            raise ValueError(f"Invalid URL scrape method: {url_scrape_method}")
 
 
 def get_url_content_or_error(url: str) -> LinkData:
@@ -123,22 +140,8 @@ def add_https_if_missing(url: str) -> str:
     return "https://" + url
 
 
-def get_content_from_urls(
-    urls: list[str],
-    batch_size: int = BATCH_SIZE,
-    url_scrape_method: str = DEFAULT_URL_SCRAPE_METHOD,
-) -> URLRetrievalData:
-    match url_scrape_method:
-        case "FIRECRAWL":
-            return get_content_from_urls_firecrawl(urls, batch_size)
-        case "REGULAR":
-            return get_content_from_urls_regular(urls, batch_size)
-        case _:
-            raise ValueError(f"Invalid URL scrape method: {url_scrape_method}")
-
-
 def get_content_from_urls_firecrawl(
-    urls: list[str], batch_size: int = BATCH_SIZE
+    urls: list[str], batch_size: int = DEFAULT_URL_SCRAPE_BATCH_SIZE
 ) -> URLRetrievalData:
     logger.info(
         f"Will fetch {len(urls)} urls using Firecrawl (batch size {batch_size} ignored)"
@@ -173,7 +176,7 @@ def get_content_from_urls_firecrawl(
 
 
 def get_content_from_urls_regular(
-    urls: list[str], batch_size: int = BATCH_SIZE
+    urls: list[str], batch_size: int = DEFAULT_URL_SCRAPE_BATCH_SIZE
 ) -> URLRetrievalData:
     logger.info(f"Will fetch {len(urls)} urls")
     res = URLRetrievalData(urls=urls)

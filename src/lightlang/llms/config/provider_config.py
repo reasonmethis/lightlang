@@ -13,3 +13,5 @@ DEFAULT_PROVIDER_CONFIGS: dict[str, dict[str, Any]] = {
         "api_key_env_var": "OPENROUTER_API_KEY",
     },
 }
+
+ALLOWED_LLM_PROVIDERS = tuple(DEFAULT_PROVIDER_CONFIGS.keys())
