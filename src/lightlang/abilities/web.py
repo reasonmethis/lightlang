@@ -135,6 +135,7 @@ def get_url_content_or_error(url: str) -> LinkData:
 
 
 def add_https_if_missing(url: str) -> str:
+    url = url.strip()
     if url.startswith("https:") or url.startswith("http:"):
         return url
     return "https://" + url
