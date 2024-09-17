@@ -2,7 +2,12 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from lightlang.types.common import ChatCompletion, ChatCompletionChunk, TaskEvent
+from lightlang.types.common import (
+    ChatCompletion,
+    ChatCompletionChunk,
+    TaskEventData,
+    TaskEventType,
+)
 
 
 class Doc(BaseModel):
@@ -49,30 +54,34 @@ class LLMTaskResponseChunk(LLMResponseChunk):
     def __init__(
         self,
         chat_completion_chunk: ChatCompletionChunk | None = None,
-        task_event: TaskEvent | None = None,
+        event_type: TaskEventType | None = None,
+        event_data: TaskEventData | None = None,
     ):
         super().__init__(chat_completion_chunk)
+        self.event_type = event_type or "DEFAULT"
+        self.event_data = event_data or {}
 
-        # If no task_event is provided, create and assign a default one
-        if task_event is None:
-            if chat_completion_chunk is None:
-                raise ValueError("No chat_completion_chunk or task_event provided.")
-            task_event = TaskEvent(event="UPDATE_TASK")
-        self.task_event = task_event
-    
+        if self.event_type == "DEFAULT" and chat_completion_chunk is None:
+            raise ValueError("chat_completion_chunk is required for 'DEFAULT' event.")
+
     @classmethod
     def from_llm_response_chunk(
-        cls, llm_response_chunk: LLMResponseChunk, task_event: TaskEvent | None = None
+        cls,
+        llm_response_chunk: LLMResponseChunk,
+        event_type: TaskEventType | None = None,
+        event_data: TaskEventData | None = None,
     ) -> "LLMTaskResponseChunk":
         return cls(
             chat_completion_chunk=llm_response_chunk.chat_completion_chunk,
-            task_event=task_event,
+            event_type=event_type,
+            event_data=event_data,
         )
 
 
 class GeneralTaskResponseChunk:
     """A chunk of a general task's streaming response."""
 
-    def __init__(self, content_chunk: Any = None, task_event: TaskEvent | None = None):
+    def __init__(self, content_chunk: Any = None, event_type: TaskEventType | None = None, event_data: TaskEventData | None = None):
         self.content_chunk = content_chunk
-        self.task_event = task_event
+        self.event_type = event_type or "DEFAULT"
+        self.event_data = event_data or {}

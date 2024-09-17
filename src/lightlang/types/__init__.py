@@ -6,7 +6,14 @@
 # "Quick fix" hints we seem to need to use assignment where lhs identifier is different
 # from rhs identifier, and doing this here would create a mess.
 
-from .common import ChatCompletion, ChatCompletionChunk, ChatMessage, LLMProvider
+from .common import (
+    ChatCompletion,
+    ChatCompletionChunk,
+    ChatMessage,
+    LLMProvider,
+    TaskEventData,
+    TaskEventType,
+)
 from .models import Doc, LLMResponse, LLMResponseChunk
 from .utils import is_allowed_llm_provider
 
@@ -14,6 +21,8 @@ __all__ = [
     "ChatMessage",
     "ChatCompletion",
     "ChatCompletionChunk",
+    "TaskEventType",
+    "TaskEventData",
     "Doc",
     "LLMResponse",
     "is_allowed_llm_provider",

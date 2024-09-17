@@ -3,11 +3,7 @@ from collections.abc import Callable
 from typing import Generator
 
 from lightlang.llms.llm import LLM
-from lightlang.types.common import (
-    ChatMessage,
-    StreamResult,
-    TaskEvent,
-)
+from lightlang.types.common import ChatMessage, StreamResult
 from lightlang.types.models import LLMTaskResponseChunk
 
 logger = logging.getLogger(__name__)
@@ -27,14 +23,13 @@ def stream_llm_call_with_retries(
         log_msg = f"Calling LLM for Task {task_id}"
         if attempt == 1:
             yield LLMTaskResponseChunk(
-                task_event=TaskEvent(event="BEGIN_TASK", data={"task_id": task_id})
+                event_type="BEGIN_TASK", event_data={"task_id": task_id}
             )
         else:
             # Since this is a retry, signal the retry event
             yield LLMTaskResponseChunk(
-                task_event=TaskEvent(
-                    event="RESTART_TASK", data={"task_id": task_id, "attempt": attempt}
-                )
+                event_type="RESTART_TASK",
+                event_data={"task_id": task_id, "attempt": attempt},
             )
             log_msg += f" (attempt {attempt}/{max_retries})"
         logger.info(log_msg)
@@ -69,6 +64,6 @@ def stream_llm_call_with_retries(
     # Signal the end of the task and return the parsed output
     event_data = {"llm_output": llm_output, "task_id": task_id}
     event_data |= {"parsed_output": parsed_output} if parser is not None else {}
-    yield LLMTaskResponseChunk(task_event=TaskEvent(event="END_TASK", data=event_data))
+    yield LLMTaskResponseChunk(event_type="END_TASK", event_data=event_data)
 
     return StreamResult(llm_output=llm_output, task_result=parsed_output)

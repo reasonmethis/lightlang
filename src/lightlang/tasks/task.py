@@ -6,7 +6,7 @@ from lightlang.llms.utils import get_user_message
 from lightlang.prompts.chat_prompt_template import ChatPromptTemplate
 from lightlang.prompts.prompt_template import PromptTemplate
 from lightlang.tasks.task_streaming import stream_llm_call_with_retries
-from lightlang.types.common import TaskEvent, TaskStreamResult
+from lightlang.types.common import TaskStreamResult
 from lightlang.types.models import GeneralTaskResponseChunk
 from lightlang.workflows.workflow_data import WorkflowData, set_workflow_data_field
 
@@ -42,7 +42,7 @@ class GeneralTask:
 
         logger.info(f"Running General Task {self.task_id}...")
         yield GeneralTaskResponseChunk(
-            task_event=TaskEvent(event="BEGIN_TASK", data={"task_id": self.task_id})
+            event_type="BEGIN_TASK", event_data={"task_id": self.task_id}
         )
 
         # Stream the output of the task, capturing the final result
@@ -55,10 +55,8 @@ class GeneralTask:
             task_result = e.value
 
         yield GeneralTaskResponseChunk(
-            task_event=TaskEvent(
-                event="END_TASK",
-                data={"task_id": self.task_id, "task_result": task_result},
-            )
+            event_type="END_TASK",
+            event_data={"task_id": self.task_id, "task_result": task_result},
         )
 
         logger.info(f"Finished Task {self.task_id}.")

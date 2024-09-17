@@ -13,13 +13,9 @@ ChatMessage = ChatCompletionMessageParam
 ChatCompletion = _ChatCompletion
 ChatCompletionChunk = _ChatCompletionChunk
 
-
-class TaskEvent(BaseModel):
-    """Data that can be yielded in place of a token to signal any kind of event."""
-
-    event: Literal["RESTART_TASK", "BEGIN_TASK", "END_TASK", "UPDATE_TASK"]
-    data: dict[str, Any] | None = None
-
+# TODO: Review if should include these types in the __all__ list
+TaskEventType = Literal["RESTART_TASK", "BEGIN_TASK", "END_TASK", "DEFAULT"]
+TaskEventData = dict[str, Any]
 
 class TaskStreamResult(BaseModel):
     """Result of a general task."""
