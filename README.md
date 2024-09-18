@@ -3,41 +3,40 @@
 [![PyPI version](https://img.shields.io/pypi/v/lightlang.svg)](https://pypi.python.org/pypi/lightlang)
 [![License](https://img.shields.io/github/license/reasonmethis/lightlang)](LICENSE)[![Python versions](https://img.shields.io/pypi/pyversions/lightlang.svg)](https://pypi.python.org/pypi/lightlang)
 
-
 A lightweight, ergonomic, close-to-the-metal framework for using Large Language Models (LLMs) and building agentic workflows.
 
 ## Table of Contents
 
 - [Introduction](#introduction)
-    - [Features](#features)
-    - [Why LightLang](#why-lightlang)
+  - [Features](#features)
+  - [Why LightLang](#why-lightlang)
 - [Getting Started](#getting-started)
-    - [Prerequisites](#prerequisites)
-    - [Installation](#installation)
-    - [Configuration](#configuration)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Configuration](#configuration)
 - [Usage](#usage)
-    - [Getting Started with LLM Responses](#getting-started-with-llm-responses)
-        - [Basic Single Prompt](#basic-single-prompt)
-        - [System Message, Temperature Control, Streaming, and Multi-Turn Conversation](#system-message-temperature-control-streaming-and-multi-turn-conversation)
-        - [Dynamic Prompt Creation Using `PromptTemplate`](#dynamic-prompt-creation-using-prompttemplate)
-    - [Multi-Turn Templating with `ChatPromptTemplate`](#multi-turn-templating-with-chatprompttemplate)
-        - [Example 1: Initializing with a List of Messages](#example-1-initializing-with-a-list-of-messages)
-        - [Example 2: Initializing from a Template String](#example-2-initializing-from-a-template-string)
-    - [Performing Google Searches, Web Scraping, and PDF Ingestion](#performing-google-searches-web-scraping-and-pdf-ingestion)
-        - [Performing Google Searches](#performing-google-searches)
-        - [Web Scraping](#web-scraping)
-        - [Ingesting PDF Content](#ingesting-pdf-content)
+  - [Getting Started with LLM Responses](#getting-started-with-llm-responses)
+    - [Basic Single Prompt](#basic-single-prompt)
+    - [System Message, Temperature Control, Streaming, and Multi-Turn Conversation](#system-message-temperature-control-streaming-and-multi-turn-conversation)
+    - [Dynamic Prompt Creation Using `PromptTemplate`](#dynamic-prompt-creation-using-prompttemplate)
+  - [Multi-Turn Templating with `ChatPromptTemplate`](#multi-turn-templating-with-chatprompttemplate)
+    - [Example 1: Initializing with a List of Messages](#example-1-initializing-with-a-list-of-messages)
+    - [Example 2: Initializing from a Template String](#example-2-initializing-from-a-template-string)
+  - [Performing Google Searches, Web Scraping, and PDF Ingestion](#performing-google-searches-web-scraping-and-pdf-ingestion)
+    - [Performing Google Searches](#performing-google-searches)
+    - [Web Scraping](#web-scraping)
+    - [Ingesting PDF Content](#ingesting-pdf-content)
 - [Contributing](#contributing)
 - [License](#license)
 - [Contact](#contact)
 
 ## Introduction
 
-LightLang is a lightweight, ergonomic framework designed to help developers quickly build and manage workflows powered by Large Language Models (LLMs). Whether you're working with OpenAI's GPT models, Anthropic's Claude, or other models available via OpenRouter, LightLang provides a simple and direct way to integrate these models into your applications. 
+LightLang is a lightweight, ergonomic framework designed to help developers quickly build and manage workflows powered by Large Language Models (LLMs). Whether you're working with OpenAI's models, Anthropic's Claude, or other models available via OpenRouter, LightLang provides a simple and direct way to integrate these models into your applications.
 
 ### Why LightLang
 
-**LightLang** is designed for developers who want simplicity and flexibility without sacrificing power. It stands apart from other frameworks like LangChain and LlamaIndex by focusing on:
+**LightLang** is designed for developers who want simplicity and flexibility. It stands apart from other frameworks like LangChain and LlamaIndex by focusing on:
 
 - **Lightweight Design**: LightLang is lean, with fewer dependencies, making it faster to install and easier to integrate into existing projects.
 - **Fine Control**: While other frameworks introduce high-level abstractions that can obscure LLM interactions, LightLang gives developers direct access to model configurations and workflows.
@@ -46,7 +45,7 @@ LightLang is a lightweight, ergonomic framework designed to help developers quic
 
 ### Features
 
-- **Multi-Provider Support**: Seamless integration with popular LLM providers like OpenAI and OpenRouter, enabling access to models such as GPT-4, Claude, and many others.
+- **Multi-Provider Support**: Seamless integration with popular LLM providers like OpenAI and OpenRouter, enabling access to models such as GPT-4o, Claude, and many others.
 - **Dynamic Prompting**: Create reusable, dynamic prompts with `PromptTemplate` and `ChatPromptTemplate`, allowing you to easily format and adjust prompts on the fly.
 - **Multi-Turn Conversations**: Manage context and multi-turn conversations with LLMs, making it easier to build interactive agents and assistants.
 - **Extended Capabilities**: Perform web scraping, Google searches, and PDF ingestion to enhance LLM workflows with external data.
@@ -77,7 +76,7 @@ LightLang uses environment variables to configure access to various LLM provider
 - **`SERPAPI_API_KEY`**: Set this if you'd like to perform Google searches via the SerpAPI service.
 - **`FIRECRAWL_API_KEY`**: Required for scraping web pages the Firecrawl API (note: there is an alternative method for web scraping without an API key).
 
-To configure these environment variables, you can set them directly in your shell or add them to a `.env` file in your project.
+To configure these environment variables, you can set them directly in your shell or add them to a `.env` file in your project. In the latter case, you'll need to use a package like `python-dotenv` to load the variables into your environment.
 
 ## Usage
 
@@ -95,42 +94,47 @@ from lightlang.llms.llm import LLM
 # Initialize the LLM for OpenAI with the 'gpt-4o-mini' model
 llm = LLM(provider="openai", model="gpt-4o-mini")
 
-# Single user message
-response = llm.invoke("What is the capital of France?")
-print(response.content)
+# Send a single user message to the assistant
+print("USER:", msg := "Write a dad joke about ducks.")
+response = llm.invoke(msg)
+print("AI:", response.content)
 ```
 
-#### System Message, Temperature Control, Streaming, and Multi-Turn Conversation
+#### System Message, Model Settings, Streaming, and Multi-Turn Conversation
 
 This example demonstrates several features together:
-- Using OpenRouter as a provider to access Claude 3.5 Sonnet 
+
+- Using OpenRouter as a provider to access models such as Claude 3.5 Sonnet, Gemini, etc.
 - Setting a system message to control the assistant's behavior.
-- Adjusting the `temperature` to control creativity.
+- Setting the `temperature` to control creativity.
 - Streaming the response in real-time.
 - Maintaining context across multiple turns in a conversation.
 
 ```python
 from lightlang.llms.llm import LLM
 
-# Initialize the LLM with temperature control
+# Initialize the LLM and set the temperature
 llm = LLM(provider="openrouter", model="anthropic/claude-3.5-sonnet", temperature=0.7)
 
-# System message for context, followed by a user prompt
+# System message, followed by a user prompt
 messages = [
-    {"role": "system", "content": "You are a helpful assistant."},
-    {"role": "user", "content": "Tell me a short story about a brave knight."}
+    {"role": "system", "content": "You are an expert at writing very funny stories."},
+    {"role": "user", "content": "Start a story about a coding duck, just one sentence."}
 ]
 
-# Stream the response in real-time
+# Stream the response
 for chunk in llm.stream(messages):
     if chunk.content:
-        print(chunk.content, end="")
+        print(chunk.content, end="", flush=True) # Flush the buffer to print immediately
 
-# Follow-up message to continue the conversation
-messages.append({"role": "user", "content": "What happens to the knight at the end?"})
+# Add the response and a new user message to the chat history
+messages += [
+    {"role": "assistant", "content": llm.stream_content},
+    {"role": "user", "content": "Continue with the next sentence."}
+]
 
-# Get the next part of the story while maintaining context
-response = llm.invoke(messages) # We can also stream the response here
+# Get a new response (we could also stream it here)
+response = llm.invoke(messages)
 print(response.content)
 ```
 
@@ -140,25 +144,27 @@ Here we use `PromptTemplate` to dynamically create a prompt with placeholders th
 
 ```python
 from lightlang.llms.llm import LLM
-from lightlang.prompts.prompt_template import PromptTemplate
 
-# Initialize the LLM with model configuration
-llm = LLM(
-    provider="openai", 
-    model="gpt-4o-mini", 
-    temperature=0.5,  # Balanced creativity
-    model_config={"max_tokens": 150}  # Limit the response to 150 tokens
-)
+# Define the model config. Possible parameters are described in the API documentation:
+#     - for OpenAI: https://platform.openai.com/docs/api-reference/chat/create)
+#     - for OpenRouter: https://openrouter.ai/docs/parameters
+#     - for OpenRouter, by model: https://openrouter.ai/docs/parameters-api
+model_config = {"temperature": 0.9, "stop": "\n"}
+
+# Initialize the LLM with the model specified in .env (or default) and above settings
+llm = LLM(provider="openai", model="gpt-4o-mini", model_config=model_config)
 
 # Define a prompt template with placeholders
-template = PromptTemplate("Explain the importance of {concept} in {field}.")
+template = PromptTemplate("Write a one-liner stand-up comedy joke about a {adjective} {noun}")
 
 # Dynamically substitute the placeholders
-prompt = template.format(concept="machine learning", field="healthcare")
+adjective = random.choice(["huge", "tiny", "sleepy", "hungry", "squishy", "fluffy"])
+noun = random.choice(["duck", "dog", "dodo", "dolphin", "dinosaur", "donkey"])
+prompt = template.format(adjective=adjective, noun=noun)
 
 # Invoke the LLM with the dynamically generated prompt
-response = llm.invoke(prompt)
-print(response.content)
+print("USER:", prompt)
+print("AI:", llm.invoke(prompt).content)
 ```
 
 ### Multi-Turn Templating with `ChatPromptTemplate`
@@ -201,7 +207,6 @@ from lightlang.prompts.chat_prompt_template import ChatPromptTemplate
 
 # Template string for multi-step conversation
 template_str = '''
-<name support_flow>
 <system>
 You are a customer support assistant specialized in {specialty}.
 </system>
@@ -217,6 +222,77 @@ chat_prompt = ChatPromptTemplate.from_string(template_str)
 messages = chat_prompt.format(specialty="password resets", issue="resetting my password")
 
 # Invoke the LLM as before ...
+```
+
+### Prompt-chaining Workflows with `SequentialWorkflow`
+
+In this example, we create a `SequentialWorkflow` with three prompts, which generates a random thesis for debating, provides the affirmative case for the thesis, and prepares a rebuttal.
+
+```python
+from lightlang.llms.llm import LLM
+from shared.constants import PROVIDER, MODEL
+from lightlang.workflows.sequential_workflow import SequentialWorkflow
+
+# Define the input data for the workflow
+workflow_data = {"topic": "philosopy of mind"}  # Each task will add its output to this
+
+# Define the first prompt
+# This prompt instructs the assistant to generate a random thesis for debating.
+prompt1 = """
+<system>
+You are a creative organizer of a debating competition.
+</system>
+<user>
+Generate a random thesis on the topic of '{topic}' for competitors to debate. \
+Respond in one sentence in the format: "Thesis: <thesis>".
+</user>
+"""
+
+# Define the second prompt
+# It asks the assistant to provide the affirmative case for the thesis generated in the first prompt.
+prompt2 = """
+<system>
+You are a debate expert participating in a competition.
+</system>
+<user>
+Provide the affirmative case for the following thesis in just one short paragraph:
+
+{task_1_output}
+</user>
+"""
+
+# Define the third prompt
+# This prompt instructs the assistant to prepare a rebuttal.
+# It provides both the thesis and the affirmative case (from previous prompts).
+prompt3 = """
+<system>
+You are a debate expert preparing a rebuttal.
+</system>
+<user>
+Given the thesis and the affirmative case below, generate a rebuttal in just one short paragraph.
+
+Thesis:
+{task_1_output}
+
+Affirmative Case:
+{task_2_output}
+</user>
+"""
+
+# Initialize LLM with the model specified in .env (or default) and set the temperature
+llm = LLM(provider="openai", model="gpt-4o-mini", temperature=0.8)
+
+# Create the SequentialWorkflow with the string prompt templates
+workflow = SequentialWorkflow(
+    tasks=[prompt1, prompt2, prompt3], default_llm=llm, workflow_data=workflow_data
+)
+
+# Run the workflow
+for chunk in workflow.stream():
+    if chunk.event_type != "DEFAULT":
+        print(f"\n--- Task {workflow.task_id}: event '{chunk.event_type}' ---\n")
+    elif chunk.content is not None:
+        print(chunk.content, end="", flush=True)
 ```
 
 ### Performing Google Searches, Web Scraping, and PDF Ingestion
