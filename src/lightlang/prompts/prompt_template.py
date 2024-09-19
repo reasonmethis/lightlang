@@ -102,11 +102,30 @@ class PromptTemplate:
             else None
         )
 
-    def format(self, **inputs) -> str:
+    def _merge_inputs(self, *args, **kwargs) -> dict:
+        """Merge multiple dictionaries of inputs into a single dictionary.
+
+        Args:
+            *args: Dictionaries of key-value pairs of fields to be filled in the template.
+            **kwargs: Key-value pairs of fields to be filled in the template.
+
+        Returns:
+            A single dictionary of all inputs.
+        """
+        inputs: dict = {}
+        for input_data in args:
+            if isinstance(input_data, dict):
+                inputs.update(input_data)
+            else:
+                raise TypeError("Positional arguments must be dictionaries.")
+        inputs.update(kwargs)
+        return inputs
+    
+    def _format(self, inputs: dict) -> str:
         """Fill in the provided fields and raise an error if any field is missing.
 
         Args:
-            **inputs: Key-value pairs of fields to be filled in the template.
+            inputs: A dictionary of key-value pairs of fields to be filled in the template.
 
         Returns:
             The formatted string.
@@ -114,36 +133,51 @@ class PromptTemplate:
         Raises:
             KeyError: If a field is missing in the inputs.
         """
-        # print("inputs", list(inputs.keys()))
-        # print("-" * 50)
         if self.input_converter:
             inputs = self.input_converter.get_inputs(inputs)
-            # print("inputs", list(inputs.keys()))
-            # print("-" * 50)
         return self.template.format(**inputs)
+    
+    def format(self, *args, **kwargs) -> str:
+        """Fill in the provided fields and raise an error if any field is missing.
 
-    def format_partial(self, **inputs) -> str:
+        Args:
+            *args: Dictionaries of key-value pairs of fields to be filled in the template.
+            **kwargs: Key-value pairs of fields to be filled in the template.
+
+        Returns:
+            The formatted string.
+
+        Raises:
+            KeyError: If a field is missing in the inputs.
+        """
+        # Consolidate all inputs into a single dictionary and format the string
+        return self._format(self._merge_inputs(*args, **kwargs))
+
+    def format_partial(self, *args, **kwargs) -> str:
         """Fill in the provided fields and leave missing fields as they are.
 
         Args:
-            **inputs: Key-value pairs of fields to be filled in the template.
+            **args: Dictionaries of key-value pairs of fields to be filled in the template.
+            **kwargs: Key-value pairs of fields to be filled in the template.
 
         Returns:
             The formatted string.
         """
+        inputs = self._merge_inputs(*args, **kwargs)
         inputs = inputs | {k: "{" + k + "}" for k in self.fields if k not in inputs}
-        return self.format(**inputs)
+        return self._format(inputs)
 
-    def make_partial(self, **inputs) -> "PromptTemplate":
+    def make_partial(self, *args, **kwargs) -> "PromptTemplate":
         """Return a new PromptTemplate instance with some fields filled in.
 
         Args:
-            **inputs: Key-value pairs of fields to be filled in the template.
+            **args: Dictionaries of key-value pairs of fields to be filled in the template.
+            **kwargs: Key-value pairs of fields to be filled in the template.
 
         Returns:
             A new instance with partially filled fields.
         """
-        return PromptTemplate(self.format_partial(**inputs))
+        return PromptTemplate(self.format_partial(*args, **kwargs))
 
 
 def get_template_fields(template_string: str) -> list[str]:
@@ -156,3 +190,10 @@ def get_template_fields(template_string: str) -> list[str]:
         A list of field names.
     """
     return [field for _, field, _, _ in Formatter().parse(template_string) if field]
+
+if __name__ == "__main__":
+    template = PromptTemplate("Hello, {name}! You are {age} years old.")
+    print(template.format({"name": "John"}, age=30))
+    print(template.format_partial(name="John"))
+    print(template.format_partial({"name": "John"}))
+    print(template.make_partial(name="John").format(age=30))
