@@ -138,9 +138,20 @@ response = llm.invoke(messages)
 print(response.content)
 ```
 
-#### Dynamic Prompt Creation Using `PromptTemplate`
+#### Dynamic Prompt Creation Using `PromptTemplate` and Additional LLM Call Parameters
 
-Here we use `PromptTemplate` to dynamically create a prompt with placeholders that get filled at runtime. Additionally, we set parameters like `temperature` and `max_tokens` to control the model's behavior.
+`PromptTemplate` allows you to create a prompt template with placeholders that get filled at runtime.
+
+What's the benefit of using `PromptTemplate` over regular string formatting, such as `"my name is {name}".format(name="Alice")`? The main benefit is that you are free to **oversupply** the parameters and `PromptTemplate` will simply ignore the extra ones. By contrast, calling `"my name is {name}".format(name="Alice", age=30)` will raise an error.
+
+This feature is very useful for building LLM workflows, where we can keep all available data items in a single dictionary and freely pass it to multiple templates without worrying about extra parameters. 
+
+Additionally, `PromptTemplate` allows you to **undersupply** the parameters to create a partially filled template as a string or a new `PromptTemplate` instance.
+
+The example below demonstrates the following features:
+
+- Using `PromptTemplate` to dynamically generate prompts
+- Setting additional parameters for LLM calls, such as `stop` and `max_tokens`, to customize completions
 
 ```python
 from lightlang.llms.llm import LLM
@@ -160,7 +171,7 @@ template = PromptTemplate("Write a one-liner stand-up comedy joke about a {adjec
 # Dynamically substitute the placeholders
 adjective = random.choice(["huge", "tiny", "sleepy", "hungry", "squishy", "fluffy"])
 noun = random.choice(["duck", "dog", "dodo", "dolphin", "dinosaur", "donkey"])
-prompt = template.format(adjective=adjective, noun=noun)
+prompt = template.format(adjective=adjective, noun=noun, blah="This will be ignored")
 
 # Invoke the LLM with the dynamically generated prompt
 print("USER:", prompt)
