@@ -144,7 +144,7 @@ print(response.content)
 
 What's the benefit of using `PromptTemplate` over regular string formatting, such as `"my name is {name}".format(name="Alice")`? The main benefit is that you are free to **oversupply** the parameters and `PromptTemplate` will simply ignore the extra ones. By contrast, calling `"my name is {name}".format(name="Alice", age=30)` will raise an error.
 
-This feature is very useful for building LLM workflows, where we can keep all available data items in a single dictionary and freely pass it to multiple templates without worrying about extra parameters. 
+This feature is very useful for building LLM workflows, where we can keep all available data items in a single dictionary and freely pass it to multiple templates without worrying about extra parameters.
 
 Additionally, `PromptTemplate` allows you to **undersupply** the parameters to create a partially filled template as a string or a new `PromptTemplate` instance.
 
@@ -292,7 +292,7 @@ workflow = SequentialWorkflow(
 
 # Run the workflow
 for chunk in workflow.stream():
-    if chunk.event_type != "DEFAULT":
+    if chunk.is_event():
         print(f"\n--- Task {workflow.task_id}: event '{chunk.event_type}' ---\n")
     elif chunk.content is not None:
         print(chunk.content, end="", flush=True)

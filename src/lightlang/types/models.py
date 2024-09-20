@@ -24,7 +24,7 @@ class LLMResponse:
         self.chat_completion = chat_completion
         self.content = self.chat_completion.choices[0].message.content
 
-    def to_json(self) -> str:
+    def jsonify_full_llm_response(self) -> str:
         return self.chat_completion.model_dump_json()
 
 
@@ -40,11 +40,11 @@ class LLMResponseChunk:
             # choices can be empty for last chunk if stream_options: {"include_usage": true}
             self.content = None
 
-    def to_json(self) -> str:
+    def jsonify_full_llm_response(self) -> str:
         return (
             self.chat_completion_chunk.model_dump_json()
             if self.chat_completion_chunk is not None
-            else ""
+            else "null"
         )
 
 
@@ -77,11 +77,24 @@ class LLMTaskResponseChunk(LLMResponseChunk):
             event_data=event_data,
         )
 
+    def is_event(self) -> bool:
+        """Check if this response chunk is an event, as opposed to a content chunk."""
+        return self.event_type != "DEFAULT"
+
 
 class GeneralTaskResponseChunk:
     """A chunk of a general task's streaming response."""
 
-    def __init__(self, content_chunk: Any = None, event_type: TaskEventType | None = None, event_data: TaskEventData | None = None):
+    def __init__(
+        self,
+        content_chunk: Any = None,
+        event_type: TaskEventType | None = None,
+        event_data: TaskEventData | None = None,
+    ):
         self.content_chunk = content_chunk
         self.event_type = event_type or "DEFAULT"
         self.event_data = event_data or {}
+
+    def is_event(self) -> bool:
+        """Check if this response chunk is an event, as opposed to a content chunk."""
+        return self.event_type != "DEFAULT"
