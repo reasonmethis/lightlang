@@ -91,7 +91,7 @@ class LLMTask:
                 input_field_base = prompt_template.input_converter.input_field_base
                 input_field_map = prompt_template.input_converter.input_field_map
             prompt_template = ChatPromptTemplate(
-                [get_user_message(prompt_template.template)],
+                [get_user_message(prompt_template.get_template())],
                 input_field_base=input_field_base,
                 input_field_map=input_field_map,
             )
@@ -102,9 +102,7 @@ class LLMTask:
         self.task_id = task_id
 
     def get_output_name(self, output_name_template: str = "task_{task_id}_output"):
-        return self.chat_prompt_template.name or output_name_template.format(
-            task_id=self.task_id
-        )
+        return self.chat_prompt_template.name or output_name_template.format(task_id=self.task_id)
 
     def stream(self, workflow_data: WorkflowData, default_llm: LLM | None = None):
         # Check if we have an LLM instance to use

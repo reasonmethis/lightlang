@@ -1,4 +1,5 @@
 from string import Formatter
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -71,11 +72,11 @@ class PromptTemplate:
         Raises:
             ValueError: If a field name is not a valid identifier.
         """
-        self.template = template_string
-        self.fields = get_template_fields(template_string)
+        self._template = template_string
+        self._fields = get_template_fields(template_string)
 
         # Check for invalid fields (e.g. "{not a valid identifier}")
-        for field in self.fields:
+        for field in self._fields:
             if not field.isidentifier():
                 raise ValueError(
                     f"Invalid field name: {field}\n"
@@ -85,6 +86,14 @@ class PromptTemplate:
 
         self.set_input_converter(input_field_base, input_field_map)
 
+    def get_template(self) -> str:
+        """Get the template string."""
+        return self._template
+    
+    def get_fields(self) -> list[str]:
+        """Get the fields (placeholders) in the template string."""
+        return self._fields
+    
     def set_input_converter(
         self, input_field_base: str = "", input_field_map: dict[str, str] | None = None
     ):
@@ -120,7 +129,7 @@ class PromptTemplate:
                 raise TypeError("Positional arguments must be dictionaries.")
         inputs.update(kwargs)
         return inputs
-    
+
     def _format(self, inputs: dict) -> str:
         """Fill in the provided fields and raise an error if any field is missing.
 
@@ -135,10 +144,16 @@ class PromptTemplate:
         """
         if self.input_converter:
             inputs = self.input_converter.get_inputs(inputs)
-        return self.template.format(**inputs)
-    
-    def format(self, *args, **kwargs) -> str:
+        return self._template.format(**inputs)
+
+    def format(self, *args: dict[str, Any], **kwargs: Any) -> str:
         """Fill in the provided fields and raise an error if any field is missing.
+
+        Most of the time, you will want to call this method either with a single dictionary 
+        containing the values to substitute for the placeholders or with keyword arguments
+        representing the values to substitute for the placeholders. If you pass both or if you 
+        include more than one dictionary in the positional arguments, the dictionaries will be
+        merged into a single dictionary before filling in the template.
 
         Args:
             *args: Dictionaries of key-value pairs of fields to be filled in the template.
@@ -156,22 +171,34 @@ class PromptTemplate:
     def format_partial(self, *args, **kwargs) -> str:
         """Fill in the provided fields and leave missing fields as they are.
 
+        Most of the time, you will want to call this method either with a single dictionary
+        containing the values to substitute for the placeholders or with keyword arguments
+        representing the values to substitute for the placeholders. If you pass both or if you
+        include more than one dictionary in the positional arguments, the dictionaries will be
+        merged into a single dictionary before filling in the template.
+
         Args:
-            **args: Dictionaries of key-value pairs of fields to be filled in the template.
+            *args: Dictionaries of key-value pairs of fields to be filled in the template.
             **kwargs: Key-value pairs of fields to be filled in the template.
 
         Returns:
             The formatted string.
         """
         inputs = self._merge_inputs(*args, **kwargs)
-        inputs = inputs | {k: "{" + k + "}" for k in self.fields if k not in inputs}
+        inputs = inputs | {k: "{" + k + "}" for k in self._fields if k not in inputs}
         return self._format(inputs)
 
     def make_partial(self, *args, **kwargs) -> "PromptTemplate":
         """Return a new PromptTemplate instance with some fields filled in.
 
+        Most of the time, you will want to call this method either with a single dictionary
+        containing the values to substitute for the placeholders or with keyword arguments
+        representing the values to substitute for the placeholders. If you pass both or if you
+        include more than one dictionary in the positional arguments, the dictionaries will be
+        merged into a single dictionary before filling in the template.
+
         Args:
-            **args: Dictionaries of key-value pairs of fields to be filled in the template.
+            *args: Dictionaries of key-value pairs of fields to be filled in the template.
             **kwargs: Key-value pairs of fields to be filled in the template.
 
         Returns:
@@ -190,10 +217,3 @@ def get_template_fields(template_string: str) -> list[str]:
         A list of field names.
     """
     return [field for _, field, _, _ in Formatter().parse(template_string) if field]
-
-if __name__ == "__main__":
-    template = PromptTemplate("Hello, {name}! You are {age} years old.")
-    print(template.format({"name": "John"}, age=30))
-    print(template.format_partial(name="John"))
-    print(template.format_partial({"name": "John"}))
-    print(template.make_partial(name="John").format(age=30))
