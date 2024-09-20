@@ -103,56 +103,50 @@ class ChatPromptTemplate:
 
         Example 2 (advanced, uses all available features):
             template_str = '''
-            <name cool_analysis> # Optional name for the output of the prompt
-            <input_field_base user.profile> # Optional base path for extracting data from inputs
-            <input_field_map {"last_name": "basics.lastName"}>  # Optional mapping of the fields
-            # in the (nested) inputs dictionary (aka workflow data) to the fields in the template.
+            # Optional name for the output of the prompt
+            <name>cool_analysis</name>
+
+            # Optional base path for extracting data from inputs
+            <input_field_base>user.profile</input_field_base>
+
+            # Optional mapping of the fields in the (nested) inputs dictionary (aka workflow data)
+            # to the fields in the template.
+            <input_field_map>{"last_name": "basics.lastName"}</input_field_map>
 
             # System, user, and assistant messages. Note that the tags allow for arbitrary
-            characters after the role name, which can be helpful for some use cases, e.g. when the
-            messages themselves contain tags (e.g. if a user message itself contains "</user>").
+            # characters after the role name, which can be helpful for some use cases, e.g. when the
+            # messages themselves contain tags (e.g. if a user message itself contains "</user>").
 
             <system-abc>You are a helpful assistant with a {attitude} attitude.</system-abc>
-            <user xyz>Hello, my name is {name}. /user xyz>
+            <user xyz>Hello, my name is {name}. </user xyz>
             <assistant>Hi, {name}! How can I help you today?</assistant>
             <user>My last name is {last_name}.</user>
             '''
-            chat_prompt = ChatPromptTemplate.from_string(template_str)
         """
-        # Regex to find the name of the template
-        name_pattern = r"<name\s+(.*?)>"
-        name_match = re.search(name_pattern, template_str)
-        name = name_match.group(1) if name_match else None
 
-        # Regex to find input field base and map
-        input_field_base_pattern = r"<input_field_base\s+(.*?)>"
-        input_field_base_match = re.search(input_field_base_pattern, template_str, re.DOTALL)
-        input_field_base = input_field_base_match.group(1) if input_field_base_match else ""
-
-        input_field_map_pattern = r"<input_field_map\s+(.*?)>"
-        input_field_map_match = re.search(input_field_map_pattern, template_str, re.DOTALL)
-        input_field_map = (
-            json.loads(input_field_map_match.group(1)) if input_field_map_match else None
+        # Regex to capture the tags and their content
+        tag_pattern = (
+            r"<(system|user|assistant|name|input_field_base|input_field_map)([^>]*)>(.*?)</\1\2>"
         )
 
-        # Regex to match the opening and closing tags exactly
-        message_pattern = r"<(system|user|assistant)([^>]*)>(.*?)</\1\2>"
-
         # Find all matches in the template string
-        matches = re.findall(message_pattern, template_str, re.DOTALL)
+        matches = re.findall(tag_pattern, template_str, re.DOTALL)
 
         # If no tags found and the tag format is "auto", treat the whole string as a user message
         # If the tag format is something else, raise an error.
-        if not (matches or name_match or input_field_base_match or input_field_map_match):
+        if not matches:
             if tag_format == "auto":
                 return cls([{"role": "user", "content": template_str}])
             raise ValueError(f"No tags found in the template string: {template_str}")
 
-        # Create message templates from matches
+        # Determine arguments for instance initialization from matches
+        name = None
+        input_field_base = ""
+        input_field_map = None
         message_templates = []
-        for role, extra_chars, content in matches:
+        for tag, extra_chars, content in matches:
             # If the expected format is "literal", keep the message content as is, otherwise strip
-            # leading and trailing newlines. If the format is "newlines", throw if not found.
+            # leading and trailing newlines. If the format is "newlines", throw if no newlines.
             if tag_format != "literal":
                 if content.startswith("\n") and content.endswith("\n"):
                     content = content[1:-1]
@@ -162,7 +156,14 @@ class ChatPromptTemplate:
                         f"instead got: {content}"
                     )
 
-            message_templates.append({"role": role, "content": content})
+            if tag == "name":
+                name = content
+            elif tag == "input_field_base":
+                input_field_base = content
+            elif tag == "input_field_map":
+                input_field_map = json.loads(content)
+            else:
+                message_templates.append({"role": tag, "content": content})
 
         return cls(message_templates, name, input_field_base, input_field_map)  # type: ignore
 
@@ -177,7 +178,7 @@ class ChatPromptTemplate:
             tag_format (Literal["literal", "newlines"], optional): The format of the tags:
                 - "literal" (default): Message content is placed directly between the tags.
                 - "newlines": Each tag is placed on its own line.
-            
+
         Returns:
             str: A template string where each message's content is enclosed in tags such as
             <system>...</system>, <user>...</user>, or <assistant>...</assistant>.
@@ -186,13 +187,22 @@ class ChatPromptTemplate:
             chat_prompt = ChatPromptTemplate([...])
             template_str = chat_prompt.to_string()
         """
-        template_str = "" if self.name is None else f"<name {self.name}>\n"
-        if self.input_field_base:
-            template_str += f"<input_field_base {self.input_field_base}>\n"
-        if self.input_field_map:
-            template_str += f"<input_field_map {json.dumps(self.input_field_map)}>\n"
-
+        template_str = ""
         maybe_newline = "\n" if tag_format == "newlines" else ""
+
+        if self.name is not None:  # Accepts empty string
+            template_str += f"<name>{maybe_newline}{self.name}{maybe_newline}</name>\n"
+        if self.input_field_base:
+            template_str += (
+                f"<input_field_base>{maybe_newline}{self.input_field_base}"
+                f"{maybe_newline}</input_field_base>\n"
+            )
+        if self.input_field_map:
+            template_str += (
+                f"<input_field_map>{maybe_newline}{json.dumps(self.input_field_map)}"
+                f"{maybe_newline}</input_field_map>\n"
+            )
+
         for message in self.message_templates:
             role = message.get("role")
             content = message.get("content")
