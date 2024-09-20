@@ -78,7 +78,7 @@ SERP_API_DEFAULT_PARAMS = {
 }
 
 
-def search_with_serp_api(queries: list[str], params: dict | None = None):
+def search_with_serp_api(queries: list[str], params: dict | None = None) -> dict[str, list]:
     """Perform a Google search using the SerpApi library."""
     try:
         from serpapi import GoogleSearch

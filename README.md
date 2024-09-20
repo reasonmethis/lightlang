@@ -178,6 +178,27 @@ print("USER:", prompt)
 print("AI:", llm.invoke(prompt).content)
 ```
 
+Let's demonstrate a couple of additional features:
+
+- Instead of supplying keyword argumyents to `format`, you can pass a dictionary with the values to be filled in
+- You can also create a new `PromptTemplate` instance with a partially filled template string
+
+```python
+# Define a prompt template with placeholders
+template = PromptTemplate("Write a one-liner stand-up comedy joke about a {adjective} {noun}")
+
+# Fill the template by passing a dictionary
+values = {"adjective": "sleepy", "noun": "squirrel"}
+prompt = template.format(values)
+
+# Undersupply the values to create a partially filled template string and PromptTemplate instance
+partially_filled_string = template.format_partial(adjective="fluffy") # Pass dict or kwargs
+partially_filled_template = template.make_partial({"adjective":"fluffy"}) # Pass dict or kwargs
+
+print("Partially filled string:", partially_filled_string)
+print("New PromptTemplate's template string:", partially_filled_template.get_template())
+```
+
 ### Multi-Turn Templating with `ChatPromptTemplate`
 
 The `ChatPromptTemplate` class allows you to define and structure multi-turn conversations with Large Language Models (LLMs), including system messages. You can initialize it in two ways—either with a list of chat messages or from a template string. Both methods support the use of placeholders (denoted by curly braces) for dynamically inserting values into the messages at runtime. If you need to include actual curly braces in the message content, simply use double braces (`{{` and `}}`).
@@ -239,7 +260,6 @@ In this example, we create a `SequentialWorkflow` with three prompts, which gene
 
 ```python
 from lightlang.llms.llm import LLM
-from shared.constants import PROVIDER, MODEL
 from lightlang.workflows.sequential_workflow import SequentialWorkflow
 
 # Define the input data for the workflow
@@ -300,13 +320,11 @@ for chunk in workflow.stream():
 
 ### Performing Google Searches, Web Scraping, and PDF Ingestion
 
-This section walks through examples of how to use LightLang's capabilities for performing Google searches, web scraping (both regular and Firecrawl methods), and ingesting content from PDFs.
+This section walks through examples of how to use LightLang's capabilities for performing Google searches, web scraping, and ingesting content from PDFs.
 
 #### Performing Google Searches
 
-LightLang integrates with SerpAPI to perform Google searches and retrieve search results. You can use the `search_with_serp_api` function to search for queries and get top results.
-
-Example: Performing a Google Search
+LightLang integrates with SerpAPI to perform Google searches and retrieve search results. You can use the `search_with_serp_api` function to search for queries and get top results:
 
 ```python
 from lightlang.abilities.web import search_with_serp_api
@@ -327,8 +345,6 @@ for query, result in results.items():
 #### Web Scraping
 
 LightLang provides capabilities to scrape content from web pages. You can either use the regular scraping method or integrate with the Firecrawl API.
-
-Example: Scraping a Web Page Using Firecrawl.
 
 Firecrawl provides a convenient way to scrape web pages and return clean Markdown content. To use it, ensure that you have a Firecrawl API key and set the `FIRECRAWL_API_KEY` environment variable.
 
@@ -355,12 +371,9 @@ Scraping the content of a web page using the regular method is similar to the Fi
 
 LightLang can ingest content from PDF files using the `get_text_from_pdf` utility. This allows you to extract text from each page of a PDF and use it for further processing.
 
-Example: Extracting Text from a PDF
-
 ```python
 from lightlang.utils.ingest import get_text_from_pdf
 
-# Open the PDF file
 with open("path/to/your/document.pdf", "rb") as pdf_file:
     # Extract text from the PDF
     extracted_text = get_text_from_pdf(pdf_file)
