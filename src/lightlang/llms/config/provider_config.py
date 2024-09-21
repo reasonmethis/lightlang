@@ -4,7 +4,7 @@ from typing import Any
 DEFAULT_PROVIDER_CONFIGS: dict[str, dict[str, Any]] = {
     "openai": {
         "api_type": "openai",
-        "base_url": None, # will default to "https://api.openai.com/v1"
+        "base_url": None,  # will default to "https://api.openai.com/v1"
         "api_key_env_var": "OPENAI_API_KEY",
     },
     "openrouter": {

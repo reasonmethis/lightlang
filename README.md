@@ -92,7 +92,7 @@ The `LLM` class provides a simple unified interface for calling models from mult
 from lightlang.llms.llm import LLM
 
 # Initialize the LLM for OpenAI with the 'gpt-4o-mini' model
-llm = LLM(provider="openai", model="gpt-4o-mini")
+llm = LLM(provider="openai", model="gpt-4o-mini") # Ensure you set OPENAI_API_KEY env variable
 
 # Send a single user message to the assistant
 print("USER:", msg := "Write a dad joke about ducks.")
@@ -113,7 +113,7 @@ This example demonstrates several features together:
 ```python
 from lightlang.llms.llm import LLM
 
-# Initialize the LLM and set the temperature
+# Initialize LLM and set the temperature (ensure you set OPENROUTER_API_KEY env variable)
 llm = LLM(provider="openrouter", model="anthropic/claude-3.5-sonnet", temperature=0.7)
 
 # System message, followed by a user prompt
@@ -303,10 +303,10 @@ Affirmative Case:
 </user>
 """
 
-# Initialize LLM with the model specified in .env (or default) and set the temperature
+# Initialize an LLM and set the temperature
 llm = LLM(provider="openai", model="gpt-4o-mini", temperature=0.8)
 
-# Create the SequentialWorkflow with the string prompt templates
+# Create a SequentialWorkflow with the string prompt templates
 workflow = SequentialWorkflow(
     tasks=[prompt1, prompt2, prompt3], default_llm=llm, workflow_data=workflow_data
 )
@@ -322,6 +322,26 @@ for chunk in workflow.stream():
 ### Performing Google Searches, Web Scraping, and PDF Ingestion
 
 This section walks through examples of how to use LightLang's capabilities for performing Google searches, web scraping, and ingesting content from PDFs.
+
+#### Prerequisites
+
+To avoid bloat, LightLang by default includes only the core dependencies (chiefly `openai`). If you want to use the web-related functionality, you can install the additional needed dependencies by running:
+
+```bash
+pip install lightlang[web]
+```
+
+To enable ingestion of PDF content and similar features, you can run:
+    
+```bash
+pip install lightlang[ingest]
+```
+
+If you want to install all optional dependencies, you can run:
+
+```bash
+pip install lightlang[all]
+```
 
 #### Performing Google Searches
 
@@ -375,11 +395,10 @@ LightLang can ingest content from PDF files using the `get_text_from_pdf` utilit
 ```python
 from lightlang.utils.ingest import get_text_from_pdf
 
+# Extract text from the PDF
 with open("path/to/your/document.pdf", "rb") as pdf_file:
-    # Extract text from the PDF
     extracted_text = get_text_from_pdf(pdf_file)
 
-# Print the extracted text
 print(extracted_text)
 ```
 
