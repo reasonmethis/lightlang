@@ -190,6 +190,7 @@ template = PromptTemplate("Write a one-liner stand-up comedy joke about a {adjec
 # Fill the template by passing a dictionary
 values = {"adjective": "sleepy", "noun": "squirrel"}
 prompt = template.format(values)
+print("Prompt:", prompt)
 
 # Undersupply the values to create a partially filled template string and PromptTemplate instance
 partially_filled_string = template.format_partial(adjective="fluffy") # Pass dict or kwargs

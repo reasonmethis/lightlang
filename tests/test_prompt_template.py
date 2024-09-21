@@ -9,14 +9,14 @@ def test_format():
 
 
 def test_format_partial():
-    template = PromptTemplate("Hello, {name}! You are {age} years old.")
-    result = template.format_partial(name="John")
-    assert result == "Hello, John! You are {age} years old."
+    template = PromptTemplate("Hello, {name}! You are {age} {units} old.")
+    result = template.format_partial({"name": "John"}, age=30)
+    assert result == "Hello, John! You are 30 {units} old."
 
 
 def test_make_partial():
-    template = PromptTemplate("Hello, {name}! You are {age} years old.")
-    partial_template = template.make_partial(name="John")
+    template = PromptTemplate("Hello, {name}! You are {age} {units} old.")
+    partial_template = template.make_partial({"name": "John"}, units="years")
     result = partial_template.format(age=30)
     assert result == "Hello, John! You are 30 years old."
 

@@ -1,7 +1,7 @@
 import copy
 import json
 import re
-from typing import Literal
+from typing import Any, Literal, cast
 
 from lightlang.prompts.prompt_template import PromptTemplate
 from lightlang.types.common import ChatMessage
@@ -17,7 +17,7 @@ class ChatPromptTemplate:
 
     def __init__(
         self,
-        message_templates: list[ChatMessage],
+        message_templates: list[dict[str, Any]],
         name: str | None = None,
         input_field_base: str = "",
         input_field_map: dict[str, str] | None = None,
@@ -26,11 +26,15 @@ class ChatPromptTemplate:
         Initializes the ChatPromptTemplate with a list of message templates.
 
         Args:
-            message_templates (list[ChatMessage]): A list of message templates where each
-                message is represented by a ChatMessage object. Each message may contain
-                placeholders for dynamic content.
+            message_templates (list[dict[str, Any]]): A list of message templates where each
+                message is represented by a ChatMessage-compatible object, such as {"role": "user",
+                "content": "Hi, {name}". Each message may contain placeholders for dynamic content.
         """
-        self.message_templates = message_templates
+        # For now, we will assume that the user was kind enough to pass valid ChatMessage
+        # objects. TODO: Check that each message template is a ChatMessage object
+        # NOTE: We can't just require message_templates to be a list of ChatMessage objects
+        # because mypy won't allow to pass [{"role": "system", "content": "Hello"}, etc.].
+        self.message_templates = cast(list[ChatMessage], message_templates)
         self.name = name
         self.input_field_base = input_field_base
         self.input_field_map = input_field_map or {}
