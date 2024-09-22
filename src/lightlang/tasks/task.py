@@ -104,15 +104,11 @@ class LLMTask:
     def get_output_name(self, output_name_template: str = "task_{task_id}_output"):
         return self.chat_prompt_template.name or output_name_template.format(task_id=self.task_id)
 
-    def stream(self, workflow_data: WorkflowData, default_llm: LLM | None = None):
+    def stream(self, workflow_data: WorkflowData, fallback_llm: LLM | None = None):
         # Check if we have an LLM instance to use
-        llm = self.llm or default_llm
+        llm = self.llm or fallback_llm
         if llm is None:
             raise ValueError("LLM instance required for running an LLMTask.")
-
-        # Check if we have a task_id
-        if self.task_id is None:
-            raise ValueError("Task ID required for running an LLMTask.")
 
         # Stream the output of the current task
         stream_res = yield from stream_llm_call_with_retries(

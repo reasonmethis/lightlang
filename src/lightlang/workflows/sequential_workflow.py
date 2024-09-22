@@ -66,15 +66,11 @@ class SequentialWorkflow(BaseWorkflow):
                 continue
 
             # Otherwise, it's an LLM task. Stream its results
-            stream_res = yield from task.stream(
-                self.workflow_data, default_llm=self.default_llm
-            )
+            stream_res = yield from task.stream(self.workflow_data, fallback_llm=self.default_llm)
 
             # If there's a handle_task_end, call it
             if self.handle_task_end is not None:
-                self.handle_task_end(
-                    workflow=self, task_id=task_id, response=stream_res
-                )
+                self.handle_task_end(workflow=self, task_id=task_id, response=stream_res)
             # Otherwise, save the output (if an output directory is provided)
             elif (dir := self.output_dir) is not None:
                 output_name = task.get_output_name(self.output_name_template)

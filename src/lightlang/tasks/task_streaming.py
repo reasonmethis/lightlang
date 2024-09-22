@@ -1,4 +1,5 @@
 import logging
+import uuid
 from collections.abc import Callable
 from typing import Generator
 
@@ -13,11 +14,12 @@ DEFAULT_MAX_LLM_CALL_TRIES = 3
 
 def stream_llm_call_with_retries(
     messages: list[ChatMessage],
-    task_id: int | str,
     llm: LLM,
+    task_id: int | str | None = None,
     parser: Callable | None = None,  # Parser for the output (e.g. JSON extractor)
     max_retries: int | None = None,  # Defaults to DEFAULT_MAX_LLM_CALL_TRIES
 ) -> Generator[LLMTaskResponseChunk, None, StreamResult]:
+    task_id = task_id or uuid.uuid4().hex
     # Call the LLM and yield as well as collect the streaming output
     for attempt in range(1, (max_retries or DEFAULT_MAX_LLM_CALL_TRIES) + 1):
         log_msg = f"Calling LLM for Task {task_id}"
