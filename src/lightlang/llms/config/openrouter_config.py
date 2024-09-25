@@ -1,6 +1,5 @@
 from typing import Any
 
-
 OPENROUTER_MODEL_CONFIG: dict[str, dict[str, Any]] = {
     "meta-llama/llama-3-70b-instruct": {
         "context": 8192,
@@ -96,9 +95,11 @@ OPENROUTER_MODEL_CONFIG: dict[str, dict[str, Any]] = {
     },
     "meta-llama/llama-3-8b-instruct:free": {"context": 8192},
     "mistralai/mistral-7b-instruct:free": {"context": 32768},
+    "meta-llama/llama-3.1-8b-instruct:free": {"context": 131072},
+    "nousresearch/hermes-3-llama-3.1-405b:free": {"context": 131072},
 }
 
-DEFAULT_FREE_MODEL = "meta-llama/llama-3-8b-instruct:free"
+DEFAULT_FREE_MODEL = "meta-llama/llama-3.1-8b-instruct:free"
 DEFAULT_CHEAP_MODEL = "openai/gpt-4o-mini"
 DEFAULT_SMART_MODEL = "openai/gpt-4o-2024-08-06"
 

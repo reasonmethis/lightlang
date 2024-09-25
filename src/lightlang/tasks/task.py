@@ -6,7 +6,7 @@ from lightlang.llms.utils import get_user_message
 from lightlang.prompts.chat_prompt_template import ChatPromptTemplate
 from lightlang.prompts.prompt_template import PromptTemplate
 from lightlang.tasks.task_streaming import stream_llm_call_with_retries
-from lightlang.types.common import TaskStreamResult
+from lightlang.types.common import ChatMessage, TaskStreamResult
 from lightlang.types.models import GeneralTaskResponseChunk
 from lightlang.workflows.workflow_data import WorkflowData, set_workflow_data_field
 
@@ -70,12 +70,16 @@ class LLMTask:
         *,
         task_id: int | str | None = None,
         llm: LLM | None = None,
-        output_parser: Callable | None = None,
-        output_handler: Callable | None = None,
+        input_handler: Callable[["LLMTask", list[ChatMessage]], None]
+        | None = None,  # Defaults to logging the input
+        output_parser: Callable[[str], Any] | None = None,
+        output_handler: Callable[["LLMTask", WorkflowData, TaskStreamResult], None]
+        | None = None,  # Defaults to updating workflow data with the output and logging the output
         max_retries: int | None = None,
     ):
+        self.input_handler = input_handler or self.default_input_handler
         self.output_parser = output_parser
-        self.output_handler = output_handler
+        self.output_handler = output_handler or self.default_output_handler
         self.task_id = task_id
         self.llm = llm
         self.max_retries = max_retries
@@ -110,21 +114,35 @@ class LLMTask:
         if llm is None:
             raise ValueError("LLM instance required for running an LLMTask.")
 
+        # Format the messages and handle the input
+        messages = self.chat_prompt_template.format(**workflow_data)
+        self.input_handler(self, messages)
+
         # Stream the output of the current task
         stream_res = yield from stream_llm_call_with_retries(
-            messages=self.chat_prompt_template.format(**workflow_data),
+            messages=messages,
             task_id=self.task_id,
             llm=llm,
             parser=self.output_parser,
             max_retries=self.max_retries,
         )
 
-        if self.output_handler is None:
-            # Update the workflow engine's inputs with the parsed output
-            output_name = self.get_output_name()
-            set_workflow_data_field(workflow_data, output_name, stream_res.task_result)
-        else:
-            self.output_handler(stream_res)
+        # Handle the output
+        self.output_handler(self, workflow_data, stream_res)
 
         logger.info(f"Finished Task {self.task_id}.")
         return stream_res
+
+    @staticmethod
+    def default_input_handler(task: "LLMTask", messages: list[ChatMessage]):
+        logger.debug(f"Input for task {task.task_id}: {messages}")
+
+    @staticmethod
+    def default_output_handler(
+        task: "LLMTask", workflow_data: WorkflowData, stream_res: TaskStreamResult
+    ):
+        logger.debug(f"Output for task {task.task_id}: {stream_res.task_result}")
+
+        # Update the workflow engine's inputs with the parsed output
+        output_name = task.get_output_name()
+        set_workflow_data_field(workflow_data, output_name, stream_res.task_result)

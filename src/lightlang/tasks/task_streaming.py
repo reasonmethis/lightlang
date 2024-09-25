@@ -1,7 +1,7 @@
 import logging
 import uuid
 from collections.abc import Callable
-from typing import Generator
+from typing import Generator, Any
 
 from lightlang.llms.llm import LLM
 from lightlang.types.common import ChatMessage, StreamResult
@@ -16,12 +16,13 @@ def stream_llm_call_with_retries(
     messages: list[ChatMessage],
     llm: LLM,
     task_id: int | str | None = None,
-    parser: Callable | None = None,  # Parser for the output (e.g. JSON extractor)
+    parser: Callable[[str], Any] | None = None,  # Parser for the output (e.g. JSON extractor)
     max_retries: int | None = None,  # Defaults to DEFAULT_MAX_LLM_CALL_TRIES
 ) -> Generator[LLMTaskResponseChunk, None, StreamResult]:
     task_id = task_id or uuid.uuid4().hex
+    max_retries = max_retries or DEFAULT_MAX_LLM_CALL_TRIES
     # Call the LLM and yield as well as collect the streaming output
-    for attempt in range(1, (max_retries or DEFAULT_MAX_LLM_CALL_TRIES) + 1):
+    for attempt in range(1, max_retries + 1):
         log_msg = f"Calling LLM for Task {task_id}"
         if attempt == 1:
             yield LLMTaskResponseChunk(
